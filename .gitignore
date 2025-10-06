@@ -1,0 +1,10 @@
+build/
+.git/
+.idea/
+.vs/
+.vscode/
+.gitignore/
+*~.swp
+.DS_Store
+._*
+*~

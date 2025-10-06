@@ -1,0 +1,35 @@
+<RCC>
+    <qresource prefix="/">
+        <file>main.qml</file>
+        <file>Gauge.qml</file>
+        <file>AuthPrompt.qml</file>
+        <file>Toast.qml</file>
+        <file>InfoDialog.qml</file>
+        <file>ClearConfirmDialog.qml</file>
+        <file>DeleteDialog.qml</file>
+        <file>EnrollDialog.qml</file>
+        <file>FingerprintSetupDialog.qml</file>
+        <file>LEDControlDialog.qml</file>
+        <file>QueryDialog.qml</file>
+        <file>SystemConfigDialog.qml</file>
+        <file>VerifyDialog.qml</file>
+        <file>AdminPasswordDialog.qml</file>
+        <file>UnauthorizedAccessWarning.qml</file>
+
+        <!-- Atomic Components -->
+        <file>components/atoms/AnimatedRing.qml</file>
+        <file>components/atoms/CheckmarkCanvas.qml</file>
+        <file>components/atoms/CountdownTimer.qml</file>
+        <file>components/atoms/FingerprintRidges.qml</file>
+        <file>components/atoms/LockIcon.qml</file>
+        <file>components/atoms/ProgressCanvas.qml</file>
+        <file>components/atoms/StatusDot.qml</file>
+        <file>components/atoms/XMarkCanvas.qml</file>
+
+        <!-- Composite Components -->
+        <file>components/composites/AuthProgress.qml</file>
+        <file>components/composites/FeedbackDisplay.qml</file>
+        <file>components/composites/FingerprintScanner.qml</file>
+        <file>components/composites/LockoutDisplay.qml</file>
+    </qresource>
+</RCC>

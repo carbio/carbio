@@ -1,0 +1,97 @@
+# ------------------------------------------------------------------- #
+
+---
+Checks: >
+  clang-analyzer-*,
+  cppcoreguidelines-*,
+  bugprone-*,
+  modernize-*,
+  readability-*,
+  performance-*,
+  misc-*,
+  -modernize-use-trailing-return-type,
+  -cppcoreguidelines-pro-type-vararg,
+  -cppcoreguidelines-no-malloc,
+  -clang-analyzer-cplusplus.NewDeleteLeaks
+
+# ------------------------------------------------------------------- #
+
+WarningsAsErrors: 'clang-analyzer-*,cppcoreguidelines-*,bugprone-*'
+FormatStyle: file
+UseColor: true
+
+# ------------------------------------------------------------------- #
+
+CheckOptions:
+  - key:      readability-identifier-naming.ClassCase
+    value:    'lower_case'
+  - key:      readability-identifier-naming.ClassConstantCase
+    value:    'lower_case'
+  - key:      readability-identifier-naming.ClassMethodCase
+    value:    'lower_case'
+  - key:      readability-identifier-naming.ConceptCase
+    value:    'lower_case'
+  - key:      readability-identifier-naming.ConstantCase
+    value:    'lower_case'
+  - key:      readability-identifier-naming.ConstantMemberCase
+    value:    'lower_case'
+  - key:      readability-identifier-naming.ConstexprFunctionCase
+    value:    'lower_case'
+  - key:      readability-identifier-naming.ConstexprMethodCase
+    value:    'lower_case'
+  - key:      readability-identifier-naming.ConstexprVariableCase
+    value:    'lower_case'
+  - key:      readability-identifier-naming.EnumCase
+    value:    'lower_case'
+  - key:      readability-identifier-naming.EnumConstantCase
+    value:    'UPPER_CASE'
+  - key:      readability-identifier-naming.FunctionCase
+    value:    'lower_case'
+  - key:      readability-identifier-naming.MacroDefinitionCase
+    value:    'UPPER_CASE'
+  - key:      readability-identifier-naming.MemberCase
+    value:    'lower_case'
+  - key:      readability-identifier-naming.NamespaceCase
+    value:    'lower_case'
+  - key:      readability-identifier-naming.ParameterCase
+    value:    'lower_case'
+  - key:      readability-identifier-naming.PrivateMemberSuffix
+    value:    '_'
+  - key:      readability-identifier-naming.ProtectedMemberSuffix
+    value:    '_'
+  - key:      readability-identifier-naming.ScopedEnumCase
+    value:    'lower_case'
+  - key:      readability-identifier-naming.ScopedEnumConstantCase
+    value:    'lower_case'
+  - key:      readability-identifier-naming.StructCase
+    value:    'lower_case'
+  - key:      readability-identifier-naming.TemplateParameterCase
+    value:    'CamelCase'
+  - key:      readability-identifier-naming.TemplateParameterIgnoredRegexp
+    value:    '^(expr-type|expr_type|[A-Z]([0-9]+|[a-z]+_?)?)$'
+  - key:      readability-identifier-naming.TypeTemplateParameterCase
+    value:    CamelCase
+  - key:      readability-identifier-naming.TypeTemplateParameterIgnoredRegexp
+    value:    '^(expr-type|expr_type|[A-Z]([0-9]+|[a-z]+_?)?)$'
+  - key:      readability-identifier-naming.TypeAliasCase
+    value:    'lower_case'
+  - key:      readability-identifier-naming.TypedefCase
+    value:    'lower_case'
+  - key:      readability-identifier-naming.UnionCase
+    value:    'lower_case'
+  - key:      readability-identifier-naming.VariableCase
+    value:    'lower_case'
+  - key:      google-readability-function-size.StatementThreshold
+    value:    '30'
+  - key:      modernize-use-auto.MinTypeNameLength
+    value:    '5'
+  - key:      cppcoreguidelines-avoid-magic-numbers.IgnoredNumericLiterals
+    value:    '0,1,-1'
+  - key:      readability-braces-around-statements.ShortStatementLines
+    value:    '1'
+  - key:      modernize-pass-by-value.IncludeStyle
+    value:    llvm
+  - key:      clang-analyzer-cplusplus.NewDeleteLeaks.WarnOnDeleteNull
+    value:    true
+
+# ------------------------------------------------------------------- #

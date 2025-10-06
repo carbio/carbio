@@ -1,0 +1,40 @@
+<RCC>
+    <qresource prefix="/">
+        <file>dashboard.svg</file>
+        <file>vector70.svg</file>
+        <file>low_beam_headlights.svg</file>
+        <file>vector1.svg</file>
+        <file>vector2.svg</file>
+        <file>first_right_icon.svg</file>
+        <file>fourth_right_icon.svg</file>
+        <file>lights.svg</file>
+        <file>parking_lights.svg</file>
+        <file>rare_fog_lights.svg</file>
+        <file>second_right_icon.svg</file>
+        <file>third_right_icon.svg</file>
+        <file>car.png</file>
+        <file>fuel.svg</file>
+        <file>road.svg</file>
+        <file>speedometer.svg</file>
+        <file>background.png</file>
+        <file>background.svg</file>
+        <file>needle.svg</file>
+        <file>tickmark.svg</file>
+        <file>newcar.svg</file>
+        <file>car.svg</file>
+        <file>model_3.svg</file>
+        <file>model_3.png</file>
+        <file>light_white.svg</file>
+        <file>parking_lights_white.svg</file>
+        <file>low_beam_headlights_white.svg</file>
+        <file>rare_fog_lights_red.svg</file>
+        <file>first_right_icon_grey.svg</file>
+        <file>second_right_icon_red.svg</file>
+        <file>third_right_icon_red.svg</file>
+        <file>fourth_right_icon_red.svg</file>
+        <file>gear.svg</file>
+        <file>key.svg</file>
+        <file>eye_hide.svg</file>
+        <file>eye_show.svg</file>
+    </qresource>
+</RCC>

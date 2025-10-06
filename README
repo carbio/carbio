@@ -1,0 +1,20 @@
+# Car Biometrics (CARBIO)
+
+This repository contains the practical showcase demo for Vehicle Access Control Through Biometric Authentication Computer Science Engineering Master's Thesis.
+
+## Motivation
+
+Produce a practical solution for enhancing safety and security in vehicular environment with biometric access control and enhanced security measures in software.
+
+## Technical Stack
+
+### Hardware
+
+* **Raspberry Pi 5** central host
+* **Adafruit Fingerprint Sensor ID** biometric module
+
+### Software
+
+* **C++ 20** standard
+* **CMake** for project cross build
+
