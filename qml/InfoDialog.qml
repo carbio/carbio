@@ -2,227 +2,176 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-Dialog {
+Popup {
     id: infoDialog
-    modal: true
     anchors.centerIn: parent
-    width: 900
-    height: 600
-
-    property string infoTitle: "Information"
-    property string infoMessage: ""
+    width: 500
+    height: Math.min(450, contentColumn.implicitHeight + 80)
+    modal: true
+    focus: true
+    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+    
+    property string dialogTitle: "Information"
+    property string dialogMessage: ""
     property bool isError: false
-
+    
+    // Dim background
+    Overlay.modal: Rectangle {
+        color: "#DD000000"
+    }
+    
+    // Custom background
     background: Rectangle {
+        id: dialogBox
         color: "#2A2A2A"
-        radius: 12
-        border.color: isError ? "#FF3333" : "#01E4E0"
-        border.width: 2
-    }
-
-    contentItem: ColumnLayout {
-        anchors.fill: parent
-        anchors.margins: 30
-        spacing: 20
-
-        // Header with icon and title
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 15
-
-            Rectangle {
-                Layout.preferredWidth: 50
-                Layout.preferredHeight: 50
-                radius: 25
-                color: isError ? "#FF3333" : "#01E4E0"
-                opacity: 0.2
-
-                Canvas {
-                    anchors.fill: parent
-                    onPaint: {
-                        var ctx = getContext("2d")
-                        ctx.reset()
-                        ctx.strokeStyle = infoDialog.isError ? "#FF3333" : "#01E4E0"
-                        ctx.lineWidth = 3
-                        ctx.lineCap = "round"
-
-                        if (infoDialog.isError) {
-                            // Draw X
-                            var margin = 12
-                            var size = 26
-                            ctx.beginPath()
-                            ctx.moveTo(margin, margin)
-                            ctx.lineTo(margin + size, margin + size)
-                            ctx.stroke()
-                            ctx.beginPath()
-                            ctx.moveTo(margin + size, margin)
-                            ctx.lineTo(margin, margin + size)
-                            ctx.stroke()
-                        } else {
-                            // Draw info icon (i)
-                            ctx.fillStyle = infoDialog.isError ? "#FF3333" : "#01E4E0"
-                            ctx.beginPath()
-                            ctx.arc(25, 18, 3, 0, 2 * Math.PI)
-                            ctx.fill()
-
-                            ctx.lineWidth = 4
-                            ctx.beginPath()
-                            ctx.moveTo(25, 25)
-                            ctx.lineTo(25, 38)
-                            ctx.stroke()
-                        }
-                    }
-
-                    Component.onCompleted: requestPaint()
-                }
+        radius: 20
+        border.color: infoDialog.isError ? "#FF3333" : "#01E4E0"
+        border.width: 3
+        
+        // Open animation
+        scale: infoDialog.opened ? 1.0 : 0.8
+        Behavior on scale {
+            NumberAnimation {
+                duration: 300
+                easing.type: Easing.OutBack
             }
-
-            Label {
-                text: infoTitle
-                font.pixelSize: 24
-                font.family: "Inter"
-                font.bold: Font.Bold
-                color: isError ? "#FF3333" : "#01E4E0"
-                Layout.fillWidth: true
-            }
-
-            // Close button
-            Rectangle {
-                Layout.preferredWidth: 40
-                Layout.preferredHeight: 40
-                radius: 20
-                color: closeMouseArea.containsMouse ? "#4A4A4A" : "#3A3A3A"
-                border.color: "#666666"
-                border.width: 1
-
-                Behavior on color { ColorAnimation { duration: 150 } }
-
-                MouseArea {
-                    id: closeMouseArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: infoDialog.close()
-                }
-
-                Canvas {
-                    anchors.fill: parent
-                    onPaint: {
-                        var ctx = getContext("2d")
-                        ctx.strokeStyle = "#CCCCCC"
-                        ctx.lineWidth = 2
-                        ctx.lineCap = "round"
-
-                        var margin = 12
-                        var size = 16
-
-                        ctx.beginPath()
-                        ctx.moveTo(margin, margin)
-                        ctx.lineTo(margin + size, margin + size)
-                        ctx.stroke()
-
-                        ctx.beginPath()
-                        ctx.moveTo(margin + size, margin)
-                        ctx.lineTo(margin, margin + size)
-                        ctx.stroke()
-                    }
-                }
-            }
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            height: 1
-            color: "#444444"
-        }
-
-        // Scrollable content area
-        ScrollView {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            clip: true
-
-            Label {
-                id: messageLabel
-                width: parent.width
-                text: infoMessage
-                font.pixelSize: 18
-                font.family: "Courier New"
-                color: "#FFFFFF"
-                wrapMode: Text.WordWrap
-                lineHeight: 1.5
-            }
-        }
-
-        // OK button at bottom
-        Button {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 50
-            text: "OK"
-
-            contentItem: Label {
-                text: parent.text
-                font.pixelSize: 18
-                font.family: "Inter"
-                font.bold: Font.Bold
-                color: "#1E1E1E"
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-            }
-
-            background: Rectangle {
-                color: {
-                    if (parent.down) return "#00B8B0"
-                    if (parent.hovered) return "#00FFEE"
-                    return "#01E4E0"
-                }
-                radius: 8
-                border.color: "#00FFEE"
-                border.width: 2
-
-                Behavior on color { ColorAnimation { duration: 150 } }
-            }
-
-            onClicked: infoDialog.close()
         }
     }
-
+    
     function show(title, message, error) {
-        infoTitle = title
-        infoMessage = message
+        dialogTitle = title || "Information"
+        dialogMessage = message || ""
         isError = error || false
         open()
     }
-
-    enter: Transition {
-        NumberAnimation {
-            property: "scale"
-            from: 0.9
-            to: 1.0
-            duration: 250
-            easing.type: Easing.OutBack
+    
+    contentItem: ColumnLayout {
+        id: contentColumn
+        anchors.fill: parent
+        anchors.margins: 30
+        spacing: 20
+        
+        // Icon
+        Canvas {
+            Layout.alignment: Qt.AlignHCenter
+            width: 60
+            height: 60
+            
+            onPaint: {
+                var ctx = getContext("2d")
+                ctx.reset()
+                
+                var color = infoDialog.isError ? "#FF3333" : "#01E4E0"
+                ctx.strokeStyle = color
+                ctx.fillStyle = color
+                ctx.lineWidth = 3
+                ctx.lineCap = "round"
+                
+                if (infoDialog.isError) {
+                    // Error X
+                    ctx.beginPath()
+                    ctx.moveTo(15, 15)
+                    ctx.lineTo(45, 45)
+                    ctx.stroke()
+                    ctx.beginPath()
+                    ctx.moveTo(45, 15)
+                    ctx.lineTo(15, 45)
+                    ctx.stroke()
+                } else {
+                    // Info circle with 'i'
+                    ctx.beginPath()
+                    ctx.arc(30, 30, 25, 0, 2 * Math.PI)
+                    ctx.stroke()
+                    
+                    // Dot
+                    ctx.beginPath()
+                    ctx.arc(30, 20, 3, 0, 2 * Math.PI)
+                    ctx.fill()
+                    
+                    // Line
+                    ctx.fillRect(27, 28, 6, 20)
+                }
+            }
+            
+            Component.onCompleted: requestPaint()
+            
+            Connections {
+                target: infoDialog
+                function onIsErrorChanged() {
+                    parent.requestPaint()
+                }
+            }
         }
-        NumberAnimation {
-            property: "opacity"
-            from: 0.0
-            to: 1.0
-            duration: 200
+        
+        // Title
+        Label {
+            Layout.fillWidth: true
+            text: dialogTitle
+            font.pixelSize: 22
+            font.family: "Inter"
+            font.bold: Font.Bold
+            color: infoDialog.isError ? "#FF3333" : "#01E4E0"
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
         }
-    }
-
-    exit: Transition {
-        NumberAnimation {
-            property: "scale"
-            from: 1.0
-            to: 0.9
-            duration: 150
-            easing.type: Easing.InQuad
+        
+        // Message box
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.minimumHeight: 100
+            Layout.maximumHeight: 250
+            color: "#1E1E1E"
+            radius: 12
+            border.color: infoDialog.isError ? "#FF6666" : "#444444"
+            border.width: 1
+            
+            ScrollView {
+                anchors.fill: parent
+                anchors.margins: 15
+                clip: true
+                
+                TextArea {
+                    width: parent.width
+                    text: dialogMessage
+                    font.pixelSize: 14
+                    font.family: "Consolas, monospace"
+                    color: "#FFFFFF"
+                    wrapMode: Text.WordWrap
+                    readOnly: true
+                    selectByMouse: true
+                    background: Rectangle { color: "transparent" }
+                }
+            }
         }
-        NumberAnimation {
-            property: "opacity"
-            from: 1.0
-            to: 0.0
-            duration: 150
+        
+        // Close button
+        Button {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 50
+            
+            background: Rectangle {
+                color: parent.hovered ? 
+                    (infoDialog.isError ? "#FF5555" : "#00FFEE") : 
+                    (infoDialog.isError ? "#FF3333" : "#01E4E0")
+                radius: 10
+                border.color: infoDialog.isError ? "#FF6666" : "#00FFEE"
+                border.width: 2
+                
+                Behavior on color { ColorAnimation { duration: 150 } }
+            }
+            
+            contentItem: Label {
+                text: "Close"
+                font.pixelSize: 16
+                font.family: "Inter"
+                font.bold: Font.Bold
+                color: infoDialog.isError ? "#FFFFFF" : "#1E1E1E"
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+            
+            onClicked: infoDialog.close()
         }
     }
 }

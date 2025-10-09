@@ -144,6 +144,7 @@ signals:
   void unauthorizedAccessDetected(QString details);
   void isAdminMenuAccessibleChanged();
   void adminAccessTokenChanged();
+  void adminAccessRevoked();
 
 private slots:
   void onLockoutTick();
@@ -155,6 +156,7 @@ private:
   void    handleAuthenticationFailure();
   void    performAdminFingerprintVerification();
   QString lookupDriverName(uint16_t fingerId);
+  void    lockDashboardAfterAdminFailure();
 
   std::unique_ptr<carbio::FingerprintSensor> m_sensor;
   AuthState                                  m_authState;

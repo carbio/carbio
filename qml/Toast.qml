@@ -2,49 +2,96 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-Rectangle {
+Popup {
     id: toast
-    width: Math.min(parent.width * 0.8, 600)
+    x: parent ? (parent.width - width) / 2 : 0
+    y: parent ? parent.height - height - 100 : 100
+    width: Math.min(600, parent ? parent.width * 0.8 : 600)
     height: contentColumn.height + 40
-    radius: 12
-    color: "#2A2A2A"
-    border.width: 2
-    border.color: isError ? "#FF3333" : "#32D74B"
-    opacity: 0
-    visible: false
-    z: 10000
-
+    modal: false  // Toast doesn't block interaction
+    focus: false
+    closePolicy: Popup.NoAutoClose
+    
     property string message: ""
     property bool isError: false
     property int duration: 3000
-
-    anchors.horizontalCenter: parent.horizontalCenter
-    anchors.bottom: parent.bottom
-    anchors.bottomMargin: 100
-
-    scale: 0.8
-
-    Behavior on opacity { NumberAnimation { duration: 200 } }
-    Behavior on scale { NumberAnimation { duration: 200; easing.type: Easing.OutBack } }
-
-    ColumnLayout {
+    
+    // No dimmed overlay for toast
+    Overlay.modal: Item {}
+    Overlay.modeless: Item {}
+    
+    background: Rectangle {
+        color: "#2A2A2A"
+        radius: 12
+        border.width: 2
+        border.color: toast.isError ? "#FF3333" : "#32D74B"
+        
+        // Popup handles opacity animation
+        layer.enabled: true
+        layer.effect: ShaderEffect {
+            property real shadow: 0.5
+            fragmentShader: "
+                varying highp vec2 qt_TexCoord0;
+                uniform sampler2D source;
+                uniform lowp float qt_Opacity;
+                uniform lowp float shadow;
+                void main() {
+                    gl_FragColor = texture2D(source, qt_TexCoord0) * qt_Opacity;
+                }
+            "
+        }
+    }
+    
+    // Open animation
+    enter: Transition {
+        NumberAnimation {
+            property: "opacity"
+            from: 0.0
+            to: 1.0
+            duration: 200
+        }
+        NumberAnimation {
+            property: "scale"
+            from: 0.8
+            to: 1.0
+            duration: 200
+            easing.type: Easing.OutBack
+        }
+    }
+    
+    // Close animation
+    exit: Transition {
+        NumberAnimation {
+            property: "opacity"
+            from: 1.0
+            to: 0.0
+            duration: 250
+        }
+        NumberAnimation {
+            property: "scale"
+            from: 1.0
+            to: 0.8
+            duration: 250
+        }
+    }
+    
+    contentItem: ColumnLayout {
         id: contentColumn
-        anchors.fill: parent
-        anchors.margins: 20
-        spacing: 10
-
+        spacing: 0
+        
         RowLayout {
             Layout.fillWidth: true
+            Layout.margins: 20
             spacing: 15
-
+            
             // Icon
             Rectangle {
                 Layout.preferredWidth: 40
                 Layout.preferredHeight: 40
                 radius: 20
-                color: isError ? "#FF3333" : "#32D74B"
+                color: toast.isError ? "#FF3333" : "#32D74B"
                 opacity: 0.2
-
+                
                 Canvas {
                     anchors.fill: parent
                     onPaint: {
@@ -53,7 +100,7 @@ Rectangle {
                         ctx.strokeStyle = toast.isError ? "#FF3333" : "#32D74B"
                         ctx.lineWidth = 3
                         ctx.lineCap = "round"
-
+                        
                         if (toast.isError) {
                             // Draw X
                             var margin = 10
@@ -75,11 +122,18 @@ Rectangle {
                             ctx.stroke()
                         }
                     }
-
+                    
                     Component.onCompleted: requestPaint()
+                    
+                    Connections {
+                        target: toast
+                        function onIsErrorChanged() {
+                            parent.requestPaint()
+                        }
+                    }
                 }
             }
-
+            
             // Message text
             Label {
                 Layout.fillWidth: true
@@ -90,77 +144,58 @@ Rectangle {
                 wrapMode: Text.WordWrap
                 lineHeight: 1.3
             }
-
+            
             // Close button
-            Rectangle {
+            Button {
                 Layout.preferredWidth: 30
                 Layout.preferredHeight: 30
-                radius: 15
-                color: closeMouseArea.containsMouse ? "#4A4A4A" : "#3A3A3A"
-                border.color: "#666666"
-                border.width: 1
-
-                Behavior on color { ColorAnimation { duration: 150 } }
-
-                MouseArea {
-                    id: closeMouseArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: toast.hide()
+                
+                background: Rectangle {
+                    radius: 15
+                    color: parent.hovered ? "#4A4A4A" : "#3A3A3A"
+                    border.color: "#666666"
+                    border.width: 1
+                    
+                    Behavior on color { ColorAnimation { duration: 150 } }
                 }
-
-                Canvas {
-                    anchors.fill: parent
+                
+                contentItem: Canvas {
                     onPaint: {
                         var ctx = getContext("2d")
                         ctx.strokeStyle = "#CCCCCC"
                         ctx.lineWidth = 2
                         ctx.lineCap = "round"
-
+                        
                         var margin = 9
                         var size = 12
-
+                        
                         ctx.beginPath()
                         ctx.moveTo(margin, margin)
                         ctx.lineTo(margin + size, margin + size)
                         ctx.stroke()
-
+                        
                         ctx.beginPath()
                         ctx.moveTo(margin + size, margin)
                         ctx.lineTo(margin, margin + size)
                         ctx.stroke()
                     }
                 }
+                
+                onClicked: toast.close()
             }
         }
     }
-
+    
     Timer {
         id: hideTimer
         interval: toast.duration
-        onTriggered: toast.hide()
+        onTriggered: toast.close()
     }
-
+    
     function show(msg, error) {
         message = msg
         isError = error || false
-        visible = true
-        opacity = 1
-        scale = 1.0
+        open()
         hideTimer.restart()
-    }
-
-    function hide() {
-        opacity = 0
-        scale = 0.8
-        hideTimer.stop()
-        hideDelayTimer.start()
-    }
-
-    Timer {
-        id: hideDelayTimer
-        interval: 250
-        onTriggered: toast.visible = false
     }
 }
