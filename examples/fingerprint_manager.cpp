@@ -1,211 +1,171 @@
-#include "carbio/fingerprint.h"
-#include "print_helper.h"
-
-#include <QCoreApplication>
-#include <QDebug>
-#include <QTextStream>
+#include "carbio/fingerprint_sensor.h"
 
 #include <algorithm>
 #include <iostream>
 #include <limits>
+#include <string>
 #include <thread>
 
 using namespace carbio;
 
-QTextStream cin(stdin);
-QTextStream cout(stdout);
-
-bool getFingerprint(FingerprintSensor &sensor)
+// Helper function to get device capacity for searches
+uint16_t getDeviceCapacity(fingerprint_sensor &sensor)
 {
-  cout << "Waiting for image..." << Qt::endl;
-  cout.flush();
+  auto params = sensor.get_device_setting_info();
+  return params ? params->capacity : 127; // Default to 127 if read fails
+}
 
-  while (sensor.captureImage() != StatusCode::Success)
+bool getFingerprint(fingerprint_sensor &sensor)
+{
+  std::cout << "Waiting for image..." << std::endl;
+
+  while (!sensor.capture_image())
   {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
 
-  cout << "Templating..." << Qt::endl;
-  cout.flush();
+  std::cout << "Templating..." << std::endl;
 
-  if (sensor.imageToTemplate(1) != StatusCode::Success)
+  if (!sensor.extract_features(1))
   {
     return false;
   }
 
-  cout << "Searching..." << Qt::endl;
-  cout.flush();
+  std::cout << "Searching..." << std::endl;
 
-  auto result = sensor.fastSearch();
+  uint16_t capacity = getDeviceCapacity(sensor);
+  auto result = sensor.fast_search_model(0, 1, capacity);
 
   return result.has_value();
 }
 
-bool getFingerprintDetail(FingerprintSensor &sensor)
+std::optional<search_query_info> getFingerprintDetail(fingerprint_sensor &sensor)
 {
-  cout << "Getting image...";
-  cout.flush();
+  std::cout << "Getting image..." << std::flush;
 
-  StatusCode status;
-  while ((status = sensor.captureImage()) == StatusCode::NoFinger)
+  void_result status;
+  while ((status = sensor.capture_image()).error() == status_code::no_finger)
   {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
 
-  if (status == StatusCode::Success)
+  if (status)
   {
-    cout << "Image taken" << Qt::endl;
+    std::cout << "Image taken" << std::endl;
   }
   else
   {
-    if (status == StatusCode::NoFinger)
-      cout << "No finger detected" << Qt::endl;
-    else if (status == StatusCode::ImageCaptureFailed)
-      cout << "Imaging error" << Qt::endl;
-    else
-      cout << "Other error" << Qt::endl;
-    return false;
+    std::cout << "Error: " << get_message(status.error()) << std::endl;
+    return std::nullopt;
   }
 
-  cout << "Templating...";
-  cout.flush();
+  std::cout << "Templating..." << std::flush;
 
-  status = sensor.imageToTemplate(1);
-  if (status == StatusCode::Success)
+  status = sensor.extract_features(1);
+  if (status)
   {
-    cout << "Templated" << Qt::endl;
+    std::cout << "Templated" << std::endl;
   }
   else
   {
-    if (status == StatusCode::ImageQualityPoor)
-      cout << "Image quality too poor" << Qt::endl;
-    else if (status == StatusCode::FeatureExtractionFailed)
-      cout << "Could not identify features" << Qt::endl;
-    else if (status == StatusCode::InvalidImage)
-      cout << "Image invalid" << Qt::endl;
-    else
-      cout << "Other error" << Qt::endl;
-    return false;
+    std::cout << "Error: " << get_message(status.error()) << std::endl;
+    return std::nullopt;
   }
 
-  cout << "Searching...";
-  cout.flush();
+  std::cout << "Searching..." << std::flush;
 
-  auto result = sensor.fastSearch();
+  uint16_t capacity = getDeviceCapacity(sensor);
+  auto result = sensor.fast_search_model(0, 1, capacity);
   if (result)
   {
-    cout << "Found fingerprint!" << Qt::endl;
-    return true;
+    std::cout << "Found fingerprint!" << std::endl;
+    return *result; // Convert result<T> to optional<T>
   }
   else
   {
-    cout << "No match found" << Qt::endl;
-    return false;
+    std::cout << "No match found" << std::endl;
+    return std::nullopt;
   }
 }
 
 /// @brief Enroll a new fingerprint
-bool enrollFinger(FingerprintSensor &sensor, uint16_t location)
+bool enrollFinger(fingerprint_sensor &sensor, uint16_t location)
 {
   for (int fingerImg = 1; fingerImg <= 2; ++fingerImg)
   {
     if (fingerImg == 1)
-      cout << "Place finger on sensor...";
+      std::cout << "Place finger on sensor..." << std::flush;
     else
-      cout << "Place same finger again...";
-    cout.flush();
+      std::cout << "Place same finger again..." << std::flush;
 
     while (true)
     {
-      auto status = sensor.captureImage();
-      if (status == StatusCode::Success)
+      auto status = sensor.capture_image();
+      if (status)
       {
-        cout << "Image taken" << Qt::endl;
+        std::cout << "Image taken" << std::endl;
         break;
       }
-      if (status == StatusCode::NoFinger)
+      if (status.error() == status_code::no_finger)
       {
-        cout << ".";
-        cout.flush();
-      }
-      else if (status == StatusCode::ImageCaptureFailed)
-      {
-        cout << "Imaging error" << Qt::endl;
-        return false;
+        std::cout << "." << std::flush;
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
       }
       else
       {
-        cout << "Other error" << Qt::endl;
+        std::cout << "\nError: " << get_message(status.error()) << std::endl;
         return false;
       }
     }
 
-    cout << "Templating...";
-    cout.flush();
+    std::cout << "Templating..." << std::flush;
 
-    auto status = sensor.imageToTemplate(fingerImg);
-    if (status == StatusCode::Success)
+    auto status = sensor.extract_features(fingerImg);
+    if (status)
     {
-      cout << "Templated" << Qt::endl;
+      std::cout << "Templated" << std::endl;
     }
     else
     {
-      if (status == StatusCode::ImageQualityPoor)
-        cout << "Image quality too poor" << Qt::endl;
-      else if (status == StatusCode::FeatureExtractionFailed)
-        cout << "Could not identify features" << Qt::endl;
-      else if (status == StatusCode::InvalidImage)
-        cout << "Image invalid" << Qt::endl;
-      else
-        cout << "Other error" << Qt::endl;
+      std::cout << "\nError: " << get_message(status.error()) << std::endl;
       return false;
     }
 
     if (fingerImg == 1)
     {
-      cout << "Remove finger" << Qt::endl;
+      std::cout << "Remove finger" << std::endl;
       std::this_thread::sleep_for(std::chrono::seconds(1));
 
-      while (sensor.captureImage() != StatusCode::NoFinger)
+      while (sensor.capture_image().error() != status_code::no_finger)
       {
         // Wait for finger to be removed
       }
     }
   }
 
-  cout << "Creating model...";
-  cout.flush();
+  std::cout << "Creating model..." << std::flush;
 
-  auto status = sensor.createModel();
-  if (status == StatusCode::Success)
+  auto status = sensor.create_model();
+  if (status)
   {
-    cout << "Created" << Qt::endl;
+    std::cout << "Created" << std::endl;
   }
   else
   {
-    if (status == StatusCode::EnrollMismatch)
-      cout << "Prints did not match" << Qt::endl;
-    else
-      cout << "Other error" << Qt::endl;
+    std::cout << "\nError: " << get_message(status.error()) << std::endl;
     return false;
   }
 
-  cout << "Storing model #" << location << "...";
-  cout.flush();
+  std::cout << "Storing model #" << location << "..." << std::flush;
 
-  status = sensor.storeTemplate(location);
-  if (status == StatusCode::Success)
+  status = sensor.store_model(location);
+  if (status)
   {
-    cout << "Stored" << Qt::endl;
+    std::cout << "Stored" << std::endl;
   }
   else
   {
-    if (status == StatusCode::InvalidLocation)
-      cout << "Bad storage location" << Qt::endl;
-    else if (status == StatusCode::FlashError)
-      cout << "Flash storage error" << Qt::endl;
-    else
-      cout << "Other error" << Qt::endl;
+    std::cout << "\nError: " << get_message(status.error()) << std::endl;
     return false;
   }
 
@@ -218,14 +178,20 @@ uint16_t getTemplateId()
   int id = 0;
   while (id < 1 || id > 127)
   {
-    cout << "Enter ID # from 1-127: ";
-    cout.flush();
+    std::cout << "Enter ID # from 1-127: " << std::flush;
 
-    QString line = cin.readLine();
-    bool    ok;
-    id = line.toInt(&ok);
+    std::string line;
+    std::getline(std::cin, line);
 
-    if (!ok || id < 1 || id > 127)
+    try
+    {
+      id = std::stoi(line);
+      if (id < 1 || id > 127)
+      {
+        id = 0;
+      }
+    }
+    catch (...)
     {
       id = 0;
     }
@@ -234,487 +200,519 @@ uint16_t getTemplateId()
 }
 
 /// @brief Identify fingerprint (find without knowing ID)
-bool identifyFingerprint(FingerprintSensor &sensor)
+bool identifyFingerprint(fingerprint_sensor &sensor)
 {
-  cout << "Place finger on sensor..." << Qt::endl;
-  cout.flush();
+  std::cout << "Place finger on sensor..." << std::endl;
 
-  StatusCode status;
-  while ((status = sensor.captureImage()) == StatusCode::NoFinger)
+  void_result status;
+  while ((status = sensor.capture_image()).error() == status_code::no_finger)
   {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
 
-  if (status != StatusCode::Success)
+  if (!status)
   {
-    cout << "Failed to capture image" << Qt::endl;
+    std::cout << "Failed to capture image" << std::endl;
     return false;
   }
 
-  cout << "Image captured, templating..." << Qt::endl;
+  std::cout << "Image captured, templating..." << std::endl;
 
-  if (sensor.imageToTemplate(1) != StatusCode::Success)
+  if (!sensor.extract_features(1))
   {
-    cout << "Failed to template image" << Qt::endl;
+    std::cout << "Failed to template image" << std::endl;
     return false;
   }
 
-  cout << "Searching database..." << Qt::endl;
+  std::cout << "Searching database..." << std::endl;
 
-  auto result = sensor.fastSearch();
+  uint16_t capacity = getDeviceCapacity(sensor);
+  auto result = sensor.fast_search_model(0, 1, capacity);
   if (result)
   {
-    cout << "Match found! ID: " << result->fingerId << ", Confidence: " << result->confidence << Qt::endl;
+    std::cout << "Match found! ID: " << result->index << ", Confidence: " << result->confidence << std::endl;
     return true;
   }
   else
   {
-    cout << "No match found in database" << Qt::endl;
+    std::cout << "No match found in database" << std::endl;
     return false;
   }
 }
 
 /// @brief Verify specific fingerprint by ID
-bool verifyFingerprint(FingerprintSensor &sensor, uint16_t expectedId)
+bool verifyFingerprint(fingerprint_sensor &sensor, uint16_t expectedId)
 {
-  cout << "Place finger on sensor..." << Qt::endl;
-  cout.flush();
+  std::cout << "Place finger on sensor..." << std::endl;
 
-  StatusCode status;
-  while ((status = sensor.captureImage()) == StatusCode::NoFinger)
+  void_result status;
+  while ((status = sensor.capture_image()).error() == status_code::no_finger)
   {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
 
-  if (status != StatusCode::Success)
+  if (!status)
   {
-    cout << "Failed to capture image" << Qt::endl;
+    std::cout << "Failed to capture image" << std::endl;
     return false;
   }
 
-  cout << "Image captured, templating..." << Qt::endl;
+  std::cout << "Image captured, templating..." << std::endl;
 
-  if (sensor.imageToTemplate(1) != StatusCode::Success)
+  if (!sensor.extract_features(1))
   {
-    cout << "Failed to template image" << Qt::endl;
+    std::cout << "Failed to template image" << std::endl;
     return false;
   }
 
-  cout << "Loading template #" << expectedId << " for comparison..." << Qt::endl;
+  std::cout << "Loading template #" << expectedId << " for comparison..." << std::endl;
 
-  if (sensor.loadTemplate(expectedId, 2) != StatusCode::Success)
+  if (!sensor.load_model(expectedId, 2))
   {
-    cout << "Failed to load template #" << expectedId << Qt::endl;
+    std::cout << "Failed to load template #" << expectedId << std::endl;
     return false;
   }
 
-  cout << "Comparing fingerprints..." << Qt::endl;
+  std::cout << "Comparing fingerprints..." << std::endl;
 
   // Search in a small range around the expected ID
-  auto result = sensor.search(1, expectedId, 1);
-  if (result && result->fingerId == expectedId)
+  auto result = sensor.search_model(expectedId, 1, 1);
+  if (result && result->index == expectedId)
   {
-    cout << "Verification SUCCESS! Confidence: " << result->confidence << Qt::endl;
+    std::cout << "Verification SUCCESS! Confidence: " << result->confidence << std::endl;
     return true;
   }
   else
   {
-    cout << "Verification FAILED - fingerprint does not match ID #" << expectedId << Qt::endl;
+    std::cout << "Verification FAILED - fingerprint does not match ID #" << expectedId << std::endl;
     return false;
   }
 }
 
 /// @brief Query if a specific template ID exists
-void queryTemplate(FingerprintSensor &sensor, uint16_t templateId)
+void queryTemplate(fingerprint_sensor &sensor, uint16_t templateId)
 {
-  auto templates = sensor.fetchTemplates();
-  if (!templates)
+  std::array<std::uint8_t, 32> buffer;
+  auto result = sensor.read_index_table(buffer);
+  if (!result)
   {
-    cout << "Failed to fetch templates" << Qt::endl;
+    std::cout << "Failed to fetch templates" << std::endl;
     return;
   }
 
-  bool found = std::find(templates->begin(), templates->end(), templateId) != templates->end();
+  // Check if the bit for this template ID is set (32 bytes = 256 templates max)
+  if (templateId >= 256)
+  {
+    std::cout << "Template ID out of range (max 255)" << std::endl;
+    return;
+  }
+
+  // Each byte contains 8 templates, bit 0 = ID 0, bit 1 = ID 1, etc.
+  std::uint16_t byte_index = templateId / 8;
+  std::uint8_t bit_index = templateId % 8;
+  bool found = (result->at(byte_index) & (1 << bit_index)) != 0;
+
   if (found)
   {
-    cout << "Template #" << templateId << " EXISTS in database" << Qt::endl;
+    std::cout << "Template #" << templateId << " EXISTS in database" << std::endl;
 
     // Try to load it to verify it's valid
-    if (sensor.loadTemplate(templateId, 1) == StatusCode::Success)
+    if (sensor.load_model(templateId, 1))
     {
-      cout << "Template is valid and loadable" << Qt::endl;
+      std::cout << "Template is valid and loadable" << std::endl;
     }
     else
     {
-      cout << "Warning: Template exists in index but failed to load" << Qt::endl;
+      std::cout << "Warning: Template exists in index but failed to load" << std::endl;
     }
   }
   else
   {
-    cout << "Template #" << templateId << " does NOT exist in database" << Qt::endl;
+    std::cout << "Template #" << templateId << " does NOT exist in database" << std::endl;
   }
 }
 
 /// @brief LED control menu
-void ledControl(FingerprintSensor &sensor)
+void ledControl(fingerprint_sensor &sensor)
 {
-  cout << "\nLED Control:" << Qt::endl;
-  cout << "1) Turn LED ON" << Qt::endl;
-  cout << "2) Turn LED OFF" << Qt::endl;
-  cout << "3) Toggle LED" << Qt::endl;
+  std::cout << "\nLED Control:" << std::endl;
+  std::cout << "1) Turn LED ON" << std::endl;
+  std::cout << "2) Turn LED OFF" << std::endl;
+  std::cout << "3) Toggle LED" << std::endl;
 
-  cout << "Select option (1-3): ";
-  cout.flush();
-  QString choice = cin.readLine().trimmed();
+  std::cout << "Select option (1-3): " << std::flush;
+  std::string choice;
+  std::getline(std::cin, choice);
 
   if (choice == "1")
   {
-    if (sensor.turnLedOn() == StatusCode::Success)
-      cout << "LED turned ON" << Qt::endl;
+    if (sensor.turn_led_on())
+      std::cout << "LED turned ON" << std::endl;
     else
-      cout << "Failed to turn LED on" << Qt::endl;
+      std::cout << "Failed to turn LED on" << std::endl;
   }
   else if (choice == "2")
   {
-    if (sensor.turnLedOff() == StatusCode::Success)
-      cout << "LED turned OFF" << Qt::endl;
+    if (sensor.turn_led_off())
+      std::cout << "LED turned OFF" << std::endl;
     else
-      cout << "Failed to turn LED off" << Qt::endl;
+      std::cout << "Failed to turn LED off" << std::endl;
   }
   else if (choice == "3")
   {
-    cout << "Current state? (on/off): ";
-    cout.flush();
-    QString state = cin.readLine().trimmed().toLower();
+    std::cout << "Current state? (on/off): " << std::flush;
+    std::string state;
+    std::getline(std::cin, state);
 
     if (state == "on")
     {
-      if (sensor.turnLedOff() == StatusCode::Success)
-        cout << "LED turned OFF" << Qt::endl;
+      if (sensor.turn_led_off())
+        std::cout << "LED turned OFF" << std::endl;
       else
-        cout << "Failed to turn LED off" << Qt::endl;
+        std::cout << "Failed to turn LED off" << std::endl;
     }
     else
     {
-      if (sensor.turnLedOn() == StatusCode::Success)
-        cout << "LED turned ON" << Qt::endl;
+      if (sensor.turn_led_on())
+        std::cout << "LED turned ON" << std::endl;
       else
-        cout << "Failed to turn LED on" << Qt::endl;
+        std::cout << "Failed to turn LED on" << std::endl;
     }
   }
 }
 
 /// @brief System configuration menu
-void configureSystem(FingerprintSensor &sensor)
+void configureSystem(fingerprint_sensor &sensor)
 {
-  cout << "\nSystem Configuration:" << Qt::endl;
-  cout << "1) Set baud rate" << Qt::endl;
-  cout << "2) Set security level" << Qt::endl;
-  cout << "3) Set data packet size" << Qt::endl;
-  cout << "4) Set password" << Qt::endl;
-  cout << "5) Show current settings" << Qt::endl;
+  std::cout << "\nSystem Configuration:" << std::endl;
+  std::cout << "1) Set baud rate" << std::endl;
+  std::cout << "2) Set security level" << std::endl;
+  std::cout << "3) Set data packet size" << std::endl;
+  std::cout << "4) Set password" << std::endl;
+  std::cout << "5) Show current settings" << std::endl;
 
-  cout << "Select option (1-5): ";
-  cout.flush();
-  QString choice = cin.readLine().trimmed();
+  std::cout << "Select option (1-5): " << std::flush;
+  std::string choice;
+  std::getline(std::cin, choice);
 
   if (choice == "1")
   {
-    cout << "\nBaud Rates:" << Qt::endl;
-    cout << "(1) 9600   (2) 19200  (3) 28800  (4) 38400   (5) 48000   6) 57600" << Qt::endl;
-    cout << "(7) 67200  (8) 76800  (9) 86400 (10) 96000  (11) 105600  (12) 115200" << Qt::endl;
-    cout << "Select baud rate: ";
-    cout.flush();
+    std::cout << "\nBaud Rates:" << std::endl;
+    std::cout << "(1) 9600   (2) 19200  (3) 28800  (4) 38400   (5) 48000   6) 57600" << std::endl;
+    std::cout << "(7) 67200  (8) 76800  (9) 86400 (10) 96000  (11) 105600  (12) 115200" << std::endl;
+    std::cout << "Select baud rate: " << std::flush;
 
-    QString line = cin.readLine();
-    bool    ok;
-    int     baudChoice = line.toInt(&ok);
+    std::string line;
+    std::getline(std::cin, line);
 
-    if (ok && baudChoice >= 1)
+    try
     {
-      BaudRateRegister baud;
+      int baudChoice = std::stoi(line);
+      if (baudChoice >= 1)
+    {
+      baud_rate_setting baud;
       switch (baudChoice)
       {
         case 1:
-          baud = BaudRateRegister::_9600;
+          baud = baud_rate_setting::_9600;
           break;
         case 2:
-          baud = BaudRateRegister::_19200;
+          baud = baud_rate_setting::_19200;
           break;
         case 3:
-          baud = BaudRateRegister::_28800;
+          baud = baud_rate_setting::_28800;
           break;
         case 4:
-          baud = BaudRateRegister::_38400;
+          baud = baud_rate_setting::_38400;
           break;
         case 5:
-          baud = BaudRateRegister::_48000;
+          baud = baud_rate_setting::_48000;
           break;
         case 6:
-          baud = BaudRateRegister::_57600;
+          baud = baud_rate_setting::_57600;
           break;
         case 7:
-          baud = BaudRateRegister::_67200;
+          baud = baud_rate_setting::_67200;
           break;
         case 8:
-          baud = BaudRateRegister::_76800;
+          baud = baud_rate_setting::_76800;
           break;
         case 9:
-          baud = BaudRateRegister::_86400;
+          baud = baud_rate_setting::_86400;
           break;
         case 10:
-          baud = BaudRateRegister::_96000;
+          baud = baud_rate_setting::_96000;
           break;
         case 11:
-          baud = BaudRateRegister::_105600;
+          baud = baud_rate_setting::_105600;
           break;
         case 12:
-          baud = BaudRateRegister::_115200;
+          baud = baud_rate_setting::_115200;
           break;
         default:
-          cout << "Invalid baud rate" << Qt::endl;
+          std::cout << "Invalid baud rate" << std::endl;
           return;
       }
 
-      if (sensor.setBaudRate(baud) == StatusCode::Success)
-        cout << "Baud rate updated successfully. Reconnect required." << Qt::endl;
+      if (sensor.set_baud_rate_setting(baud))
+        std::cout << "Baud rate updated successfully. Reconnect required." << std::endl;
       else
-        cout << "Failed to set baud rate" << Qt::endl;
+        std::cout << "Failed to set baud rate" << std::endl;
+      }
+    }
+    catch (...)
+    {
+      std::cout << "Invalid input" << std::endl;
     }
   }
   else if (choice == "2")
   {
-    cout << "\nSecurity Levels:" << Qt::endl;
-    cout << "1) Lowest  2) Low  3) Balanced  4) High  5) Highest" << Qt::endl;
-    cout << "Select security level (1-5): ";
-    cout.flush();
+    std::cout << "\nSecurity Levels:" << std::endl;
+    std::cout << "1) Lowest  2) Low  3) Balanced  4) High  5) Highest" << std::endl;
+    std::cout << "Select security level (1-5): " << std::flush;
 
-    QString line = cin.readLine();
-    bool    ok;
-    int     level = line.toInt(&ok);
+    std::string line;
+    std::getline(std::cin, line);
 
-    if (ok && level >= 1 && level <= 5)
+    try
     {
-      SecurityLevelRegister secLevel = static_cast<SecurityLevelRegister>(level);
-      if (sensor.setSecurityLevelRegister(secLevel) == StatusCode::Success)
-        cout << "Security level updated successfully" << Qt::endl;
+      int level = std::stoi(line);
+      if (level >= 1 && level <= 5)
+      {
+        security_level_setting secLevel = static_cast<security_level_setting>(level);
+        if (sensor.set_security_level_setting(secLevel))
+          std::cout << "Security level updated successfully" << std::endl;
+        else
+          std::cout << "Failed to set security level" << std::endl;
+      }
       else
-        cout << "Failed to set security level" << Qt::endl;
+      {
+        std::cout << "Invalid input" << std::endl;
+      }
     }
-    else
+    catch (...)
     {
-      cout << "Invalid input" << Qt::endl;
+      std::cout << "Invalid input" << std::endl;
     }
   }
   else if (choice == "3")
   {
-    cout << "\nData Packet Sizes:" << Qt::endl;
-    cout << "0) 32 bytes  1) 64 bytes  2) 128 bytes  3) 256 bytes" << Qt::endl;
-    cout << "Select packet size (0-3): ";
-    cout.flush();
+    std::cout << "\nData Packet Sizes:" << std::endl;
+    std::cout << "0) 32 bytes  1) 64 bytes  2) 128 bytes  3) 256 bytes" << std::endl;
+    std::cout << "Select packet size (0-3): " << std::flush;
 
-    QString line = cin.readLine();
-    bool    ok;
-    int     size = line.toInt(&ok);
+    std::string line;
+    std::getline(std::cin, line);
 
-    if (ok && size >= 0 && size <= 3)
+    try
     {
-      DataPacketSizeRegister packetSize = static_cast<DataPacketSizeRegister>(size);
-      if (sensor.setDataPacketSizeRegister(packetSize) == StatusCode::Success)
-        cout << "Data packet size updated successfully" << Qt::endl;
+      int size = std::stoi(line);
+      if (size >= 0 && size <= 3)
+      {
+        data_length_setting packetSize = static_cast<data_length_setting>(size);
+        if (sensor.set_data_length_setting(packetSize))
+          std::cout << "Data packet size updated successfully" << std::endl;
+        else
+          std::cout << "Failed to set data packet size" << std::endl;
+      }
       else
-        cout << "Failed to set data packet size" << Qt::endl;
+      {
+        std::cout << "Invalid input" << std::endl;
+      }
     }
-    else
+    catch (...)
     {
-      cout << "Invalid input" << Qt::endl;
+      std::cout << "Invalid input" << std::endl;
     }
   }
   else if (choice == "4")
   {
-    cout << "Password change not implemented in module" << Qt::endl;
+    std::cout << "Password change not implemented in module" << std::endl;
   }
   else if (choice == "5")
   {
-    auto params = sensor.getParameters();
+    auto params = sensor.get_device_setting_info();
     if (params)
     {
-      cout << "\nCurrent System Settings:" << Qt::endl;
-      cout << "Status Register: 0x" << Qt::hex << params->statusRegister << Qt::endl;
-      cout << "System ID: 0x" << Qt::hex << params->systemId << Qt::endl;
-      cout << "Library Size: " << Qt::dec << params->capacity << Qt::endl;
-      cout << "Security Level: " << params->SecurityLevel << Qt::endl;
-      cout << "Device Address: 0x" << Qt::hex << params->deviceAddress << Qt::endl;
-      cout << "Data Packet Size: " << Qt::dec << params->packetLength << Qt::endl;
-      cout << "Baud Rate: " << params->baudRate << Qt::endl;
+      std::cout << "\nCurrent System Settings:" << std::endl;
+      std::cout << "Status Register: 0x" << std::hex << params->status << std::endl;
+      std::cout << "System ID: 0x" << std::hex << params->id << std::endl;
+      std::cout << "Library Size: " << std::dec << params->capacity << std::endl;
+      std::cout << "Security Level: " << params->security_level << std::endl;
+      std::cout << "Device Address: 0x" << std::hex << params->address << std::endl;
+      std::cout << "Data Packet Size: " << std::dec << params->length << std::endl;
+      std::cout << "Baud Rate: " << params->baudrate << std::endl;
     }
     else
     {
-      cout << "Failed to read system parameters" << Qt::endl;
+      std::cout << "Failed to read system parameters" << std::endl;
     }
   }
 }
 
 int main(int argc, char *argv[])
 {
-  QCoreApplication app(argc, argv);
-
-  FingerprintSensor sensor("/dev/ttyAMA0");
-  if (!sensor.begin())  // Auto-detect baud rate
+  fingerprint_sensor sensor;
+  if (!sensor.open("/dev/ttyAMA0"))
   {
-    qCritical() << "Failed to connect to fingerprint sensor";
+    std::cerr << "Failed to connect to fingerprint sensor" << std::endl;
     return 1;
   }
 
   // Main menu loop
   while (true)
   {
-    cout << "----------------" << Qt::endl;
+    std::cout << "----------------" << std::endl;
 
     // Fetch and display templates
-    auto templates = sensor.fetchTemplates();
-    if (templates)
+    std::array<std::uint8_t, 32> buffer;
+    auto result = sensor.read_index_table(buffer);
+    if (result)
     {
-      cout << "Fingerprint templates: [";
-      for (size_t i = 0; i < templates->size(); ++i)
+      std::cout << "Fingerprint templates: [";
+      bool first = true;
+      // Iterate through the bitmap and extract template IDs (32 bytes = 256 templates max)
+      for (std::uint16_t i = 0; i < 32 * 8; ++i)
       {
-        if (i > 0)
-          cout << ", ";
-        cout << (*templates)[i];
+        std::uint16_t byte_index = i / 8;
+        std::uint8_t bit_index = i % 8;
+        if ((result->at(byte_index) & (1 << bit_index)) != 0)
+        {
+          if (!first) std::cout << ", ";
+          std::cout << i;
+          first = false;
+        }
       }
-      cout << "]" << Qt::endl;
+      std::cout << "]" << std::endl;
     }
     else
     {
-      cout << "Failed to read templates" << Qt::endl;
+      std::cout << "Failed to read templates" << std::endl;
     }
 
-    cout << "e) enroll print" << Qt::endl;
-    cout << "f) find print" << Qt::endl;
-    cout << "i) identify print" << Qt::endl;
-    cout << "v) verify print" << Qt::endl;
-    cout << "q) query print by ID" << Qt::endl;
-    cout << "d) delete print" << Qt::endl;
-    cout << "c) clear prints" << Qt::endl;
-    cout << "l) LED control" << Qt::endl;
-    cout << "s) system config" << Qt::endl;
-    cout << "r) soft reset sensor" << Qt::endl;
-    cout << "x) quit" << Qt::endl;
-    cout << "----------------" << Qt::endl;
-    cout << "> ";
-    cout.flush();
+    std::cout << "e) enroll print" << std::endl;
+    std::cout << "f) find print" << std::endl;
+    std::cout << "i) identify print" << std::endl;
+    std::cout << "v) verify print" << std::endl;
+    std::cout << "q) query print by ID" << std::endl;
+    std::cout << "d) delete print" << std::endl;
+    std::cout << "c) clear prints" << std::endl;
+    std::cout << "l) LED control" << std::endl;
+    std::cout << "s) system config" << std::endl;
+    std::cout << "r) soft reset sensor" << std::endl;
+    std::cout << "x) quit" << std::endl;
+    std::cout << "----------------" << std::endl;
+    std::cout << "> " << std::flush;
 
-    QString input = cin.readLine().trimmed();
+    std::string input;
+    std::getline(std::cin, input);
 
-    if (input.toLower() == "e")
+    if (input == "e" || input == "E")
     {
       uint16_t id = getTemplateId();
       if (enrollFinger(sensor, id))
       {
-        cout << "Enrollment successful!" << Qt::endl;
+        std::cout << "Enrollment successful!" << std::endl;
       }
       else
       {
-        cout << "Enrollment failed" << Qt::endl;
+        std::cout << "Enrollment failed" << std::endl;
       }
     }
-    else if (input.toLower() == "f")
+    else if (input == "f" || input == "F")
     {
-      if (getFingerprintDetail(sensor))
+      auto result = getFingerprintDetail(sensor);
+      if (result)
       {
-        auto result = sensor.getLastSearchResult();
-        if (result)
-        {
-          cout << "Detected #" << result->fingerId << " with confidence " << result->confidence << Qt::endl;
-        }
+        std::cout << "Detected #" << result->index << " with confidence " << result->confidence << std::endl;
       }
       else
       {
-        cout << "Finger not found" << Qt::endl;
+        std::cout << "Finger not found" << std::endl;
       }
     }
-    else if (input.toLower() == "i")
+    else if (input == "i" || input == "I")
     {
       identifyFingerprint(sensor);
     }
-    else if (input.toLower() == "v")
+    else if (input == "v" || input == "V")
     {
       uint16_t id = getTemplateId();
       verifyFingerprint(sensor, id);
     }
-    else if (input.toLower() == "q")
+    else if (input == "q" || input == "Q")
     {
       uint16_t id = getTemplateId();
       queryTemplate(sensor, id);
     }
-    else if (input.toLower() == "d")
+    else if (input == "d" || input == "D")
     {
       uint16_t id = getTemplateId();
-      if (sensor.deleteTemplate(id, 1) == StatusCode::Success)
+      if (sensor.erase_model(id, 1))
       {
-        cout << "Deleted!" << Qt::endl;
+        std::cout << "Deleted!" << std::endl;
       }
       else
       {
-        cout << "Failed to delete" << Qt::endl;
+        std::cout << "Failed to delete" << std::endl;
       }
     }
-    else if (input == "c")
+    else if (input == "c" || input == "C")
     {
-      cout << "WARNING: This will clear fingerprints!" << Qt::endl;
-      cout << "Type 'y' to confirm: ";
-      cout.flush();
-      QString confirm = cin.readLine().trimmed();
-      if (confirm == "y")
+      std::cout << "WARNING: This will clear fingerprints!" << std::endl;
+      std::cout << "Type 'y' to confirm: " << std::flush;
+      std::string confirm;
+      std::getline(std::cin, confirm);
+      if (confirm == "y" || confirm == "Y")
       {
-        cout << "Clearing database..." << Qt::endl;
-        if (sensor.clearDatabase() == StatusCode::Success)
+        std::cout << "Clearing database..." << std::endl;
+        if (sensor.clear_database())
         {
-          cout << "All fingerprints deleted!" << Qt::endl;
+          std::cout << "All fingerprints deleted!" << std::endl;
         }
         else
         {
-          cout << "Failed to clear database" << Qt::endl;
+          std::cout << "Failed to clear database" << std::endl;
         }
       }
       else
       {
-        cout << "Cancelled" << Qt::endl;
+        std::cout << "Cancelled" << std::endl;
       }
     }
-    else if (input.toLower() == "l")
+    else if (input == "l" || input == "L")
     {
       ledControl(sensor);
     }
-    else if (input.toLower() == "s")
+    else if (input == "s" || input == "S")
     {
       configureSystem(sensor);
     }
-    else if (input.toLower() == "r")
+    else if (input == "r" || input == "R")
     {
-      cout << "Soft resetting sensor..." << Qt::endl;
-      if (sensor.softReset() == StatusCode::Success)
+      std::cout << "Soft resetting sensor..." << std::endl;
+      if (sensor.soft_reset_device())
       {
-        cout << "Sensor reset successfully" << Qt::endl;
+        std::cout << "Sensor reset successfully" << std::endl;
         // Display updated parameters
-        auto params = sensor.getParameters();
+        auto params = sensor.get_device_setting_info();
         if (params)
         {
-          cout << "Current settings after reset:" << Qt::endl;
-          cout << "  Baud Rate: " << params->baudRate << Qt::endl;
-          cout << "  Security Level: " << params->SecurityLevel << Qt::endl;
-          cout << "  Packet Length: " << params->packetLength << Qt::endl;
+          std::cout << "Current settings after reset:" << std::endl;
+          std::cout << "  Baud Rate: " << params->baudrate << std::endl;
+          std::cout << "  Security Level: " << params->security_level << std::endl;
+          std::cout << "  Packet Length: " << params->length << std::endl;
         }
       }
       else
       {
-        cout << "Failed to reset sensor" << Qt::endl;
+        std::cout << "Failed to reset sensor" << std::endl;
       }
     }
-    else if (input.toLower() == "x")
+    else if (input == "x" || input == "X")
     {
-      cout << "Disconnecting..." << Qt::endl;
-      sensor.end();
+      std::cout << "Disconnecting..." << std::endl;
+      sensor.close();
       break;
     }
   }

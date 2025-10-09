@@ -56,7 +56,7 @@ set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -107,7 +107,8 @@ string(JOIN " " GCC_COMPILE_FLAGS_SAFETY
 string(JOIN " " GCC_COMPILE_FLAGS_SECURITY
   -D_FORTIFY_SOURCE=3
   -Wwrite-strings -Wstack-protector -fstack-protector -fstack-clash-protection
-  -Wpadded -Winline -Wdisabled-optimization
+  #-Wpadded
+  -Winline -Wdisabled-optimization
   -Wlogical-op
   -Wstack-usage=1024 -fstack-usage -Wframe-larger-than=1024
   -Wtrampolines -Wvector-operation-performance
@@ -128,7 +129,8 @@ string(JOIN " " GCC_COMPILE_FLAGS_CPP
   -Wsuggest-final-types -Wsuggest-final-methods
   -Wsuggest-override
   -Wvirtual-inheritance -Wmultiple-inheritance
-  -Wtemplates -Wextra-semi
+  #-Wtemplates
+  -Wextra-semi
 )
 
 string(JOIN " " GCC_COMPILE_FLAGS_EXTRA
