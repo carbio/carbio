@@ -742,9 +742,8 @@ ApplicationWindow {
             lockoutSeconds: controller.lockoutSeconds
             driverName: controller.driverName
             isProcessing: controller.isProcessing
-            z: 100  // Above all dashboard elements
-            onAuthPromptHiding: {
-            }
+            z: 100
+            onAuthPromptHiding: {}
 
             Connections {
                 target: controller
@@ -775,7 +774,6 @@ ApplicationWindow {
         // Fingerprint verification prompt
         InfoDialog {
             id: fingerprintDialog
-            z: 550
         }
 
         UnauthorizedAccessWarning {
@@ -787,22 +785,21 @@ ApplicationWindow {
 
         FingerprintSetupDialog {
             id: fingerprintSetupDialog
-            anchors.fill: parent
-            anchors.centerIn: parent
-            z: 100
+            //anchors.fill: parent
+            //anchors.centerIn: parent
+            //z: 100
         }
 
         // Info dialog for detailed messages
         InfoDialog {
             id: infoDialog
-            z: 350
+            //z: 350
         }
 
         Connections {
             target: controller
 
             function onOperationComplete(message) {
-                // Show detailed info in dialog for multi-line or system info
                 if (message.includes("\n") || message.includes("Template #") || message.length > 80) {
                     var isSystemInfo = message.includes("System Settings:")
                     var isQueryResult = message.includes("Template #")
@@ -851,11 +848,16 @@ ApplicationWindow {
             function onUnauthorizedAccessDetected(details) {
                 // Close any open dialogs
                 adminPasswordDialog.close()
-                if (fingerprintDialog.visible) {
-                    fingerprintDialog.close()
-                }
+                fingerprintDialog.close()
                 // Show warning
                 unauthorizedAccessWarning.show(details)
+            }
+            function onAdminAccessRevoked() {
+                adminPasswordDialog.close()
+                fingerprintDialog.close()
+                infoDialog.close()
+                unauthorizedAccessWarning.close()
+                fingerprintSetupDialog.close()
             }
         }
 

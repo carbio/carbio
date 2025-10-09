@@ -324,9 +324,17 @@ void Controller::setAuthState(AuthState state)
 {
   if (m_authState != state)
   {
+    AuthState previousState = m_authState;
     m_authState = state;
     qDebug() << "Auth state changed to:" << authStateToString(state).data();
     emit authStateChanged();
+    
+    if (state == AuthState::SCANNING && previousState == AuthState::ON && m_failedAttempts > 0)
+    {
+      qInfo() << "Resetting failed attempts from" << m_failedAttempts << "to 0 (entering SCANNING from ON)";
+      m_failedAttempts = 0;
+      emit failedAttemptsChanged();
+    }
   }
 }
 
@@ -1012,31 +1020,29 @@ void Controller::verifyAdminPassword(const QString &password)
 
   qInfo() << "Verifying admin password";
 
-  // Verify password
   bool valid = m_adminAuth->verifyPassword(password);
-
   if (valid)
   {
-    qInfo() << "Password verified - proceeding to fingerprint verification";
-
-    m_auditLogger->logEvent(carbio::security::SecurityEvent::PASSWORD_VERIFIED, 0,
-                            carbio::security::AuthResult::SUCCESS, "Admin password correct");
-
-    // Move to fingerprint phase
+    qInfo() << "Password verified";
+    m_auditLogger->logEvent(carbio::security::SecurityEvent::PASSWORD_VERIFIED, 0, carbio::security::AuthResult::SUCCESS, "Admin password correct");
     m_adminAuthPhase = AdminAuthPhase::FINGERPRINT_PENDING;
     emit adminFingerprintRequired();
   }
   else
   {
     qWarning() << "Password verification failed";
-
-    m_auditLogger->logEvent(carbio::security::SecurityEvent::PASSWORD_FAILED, 0,
-                            carbio::security::AuthResult::INVALID_PASSWORD, "Admin password incorrect");
-
-    // Reset to idle
+    
+    setIsProcessing(false);
     m_adminAuthPhase = AdminAuthPhase::IDLE;
 
+    m_auditLogger->logAdminAccess(0, true, false, false);
+    m_auditLogger->logUnauthorizedAccess(0, "Non-admin fingerprint attempted admin access");
+    
+    lockDashboardAfterAdminFailure();
+    
+    emit unauthorizedAccessDetected("Unauthorized admin access attempt detected. This incident has been logged.");
     emit adminAccessDenied("Incorrect password");
+    return;
   }
 }
 
@@ -1088,8 +1094,6 @@ void Controller::onAdminFingerprintPoll()
   if (status == carbio::StatusCode::NoFinger)
   {
     m_consecutiveNoFingerAdmin++;
-
-    // Adjust polling interval exponentially to save CPU/power
     adjustAdminPollingInterval();
 
     return;
@@ -1102,33 +1106,32 @@ void Controller::onAdminFingerprintPoll()
   // Check if image capture was successful
   if (status != carbio::StatusCode::Success)
   {
+    qWarning() << "Failed to capture fingerprint during admin access - initiating security lockdown";
     setIsProcessing(false);
     m_adminAuthPhase = AdminAuthPhase::IDLE;
     m_auditLogger->logUnauthorizedAccess(0, "Failed to capture fingerprint during admin access");
+    lockDashboardAfterAdminFailure();
     emit adminAccessDenied("Failed to capture fingerprint");
     return;
   }
 
   qInfo() << "Admin finger detected and image captured - verifying...";
-
-  // Image is already captured! Proceed directly to verification
-  // DO NOT call captureImage() again!
   performAdminFingerprintVerification();
 }
 
 void Controller::performAdminFingerprintVerification()
 {
-  // IMPORTANT: Image is already captured in onAdminFingerprintPoll()
-  // DO NOT call captureImage() again! Proceed directly to template conversion
-
   // Convert captured image to template
   carbio::StatusCode status = m_sensor->imageToTemplate(1);
   if (status != carbio::StatusCode::Success)
   {
+    qWarning() << "Failed to create template during admin access - initiating security lockdown";
+
     setIsProcessing(false);
     m_adminAuthPhase = AdminAuthPhase::IDLE;
 
     m_auditLogger->logUnauthorizedAccess(0, "Failed to create template during admin access");
+    lockDashboardAfterAdminFailure();
 
     emit adminAccessDenied("Failed to process fingerprint");
     return;
@@ -1138,11 +1141,15 @@ void Controller::performAdminFingerprintVerification()
   auto result = m_sensor->fastSearch();
   if (!result)
   {
+    qWarning() << "Fingerprint NOT FOUND during admin access - initiating security lockdown";
+
     setIsProcessing(false);
     m_adminAuthPhase = AdminAuthPhase::IDLE;
 
     m_auditLogger->logAdminAccess(0, true, false, false);
     m_auditLogger->logUnauthorizedAccess(0, "Non-admin fingerprint attempted admin access");
+
+    lockDashboardAfterAdminFailure();
 
     emit unauthorizedAccessDetected("Unauthorized admin access attempt detected. This incident has been logged.");
     emit adminAccessDenied("Fingerprint not recognized");
@@ -1157,6 +1164,8 @@ void Controller::performAdminFingerprintVerification()
   // Check if fingerprint is admin (ID 0-2)
   if (!isAdminFingerprint(fingerprintId))
   {
+    qWarning() << "Non-admin fingerprint (ID" << fingerprintId << ") attempted admin access - initiating security lockdown";
+
     setIsProcessing(false);
     m_adminAuthPhase = AdminAuthPhase::IDLE;
 
@@ -1164,7 +1173,9 @@ void Controller::performAdminFingerprintVerification()
     m_auditLogger->logUnauthorizedAccess(fingerprintId,
                                          QString("Non-admin user (ID %1) attempted admin access with valid password")
                                              .arg(fingerprintId));
-
+    
+    lockDashboardAfterAdminFailure();
+    
     emit unauthorizedAccessDetected(QString("WARNING: User ID %1 attempted unauthorized admin access.\n\n"
                                             "This incident has been logged and reported.")
                                         .arg(fingerprintId));
@@ -1175,14 +1186,17 @@ void Controller::performAdminFingerprintVerification()
   // Check confidence threshold
   if (confidence < carbio::security::MIN_ADMIN_CONFIDENCE)
   {
+    qWarning() << "Too low confidence (confidence:" << confidence << ") - initiating security lockdown";
+    
     setIsProcessing(false);
     m_adminAuthPhase = AdminAuthPhase::IDLE;
 
     m_auditLogger->logUnauthorizedAccess(fingerprintId,
-                                         QString("Low confidence fingerprint match during admin access (confidence: %1)")
+                                         QString("Too low confidence during admin access (confidence: %1)")
                                              .arg(confidence));
 
-    emit adminAccessDenied(QString("Fingerprint confidence too low (%1). Try again.").arg(confidence));
+    lockDashboardAfterAdminFailure();
+    emit adminAccessDenied(QString("Too low confidence (%1). Try again.").arg(confidence));
     return;
   }
 
@@ -1226,6 +1240,26 @@ void Controller::revokeAdminAccess()
 
   m_auditLogger->logEvent(carbio::security::SecurityEvent::SESSION_ENDED, 0,
                           carbio::security::AuthResult::SUCCESS, "Admin session manually revoked");
+  
+  emit adminAccessRevoked();
+}
+
+void Controller::lockDashboardAfterAdminFailure()
+{
+  qInfo() << "SECURITY EVENT: Locking dashboard after admin authentication failure";
+  
+  m_failedAttempts = 0;
+  emit failedAttemptsChanged();
+  
+  setAuthState(AuthState::SCANNING);
+
+  if (!m_scanTimer->isActive())
+  {
+    qInfo() << "Restarting authentication scanner for re-entry";
+    startAuthentication();
+  }
+  
+  qInfo() << "Dashboard locked - user must re-authenticate to regain access";
 }
 
 bool Controller::isAdminFingerprint(int fingerprintId) const

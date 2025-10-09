@@ -36,13 +36,6 @@ Rectangle {
 
     // Monitor state transitions to ensure clean resets
     onAuthStateChanged: {
-        // When entering SCANNING state (including after lockout), ensure attempts are clear
-        if (authState === stateSCANNING && failedAttempts > 0) {
-            console.log("AuthPrompt: Detected non-zero failedAttempts (" + failedAttempts + ") in SCANNING state, forcing to 0")
-            // Force update the display by re-requesting the value
-            failedAttempts = Qt.binding(function() { return controller.failedAttempts })
-        }
-
         // Emit signal when transitioning to ON state (notify dashboard to prepare)
         if (authState === stateON) {
             authPromptHiding()
