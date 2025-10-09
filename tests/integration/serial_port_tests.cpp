@@ -469,8 +469,6 @@ TEST_F(serial_serial_test, performance_benchmarks)
     {
       auto bytes_written = serial_.write_exact(std::span{benchmark_data}, std::chrono::milliseconds{200});
       EXPECT_EQ(bytes_written, benchmark_data.size()) << "write_exact should complete full write";
-      // CRITICAL: Allow buffer to drain between writes when no hardware loopback
-      // This follows industry practice for serial port stress testing
       serial_.drain();
     }
   auto sync_write_end = std::chrono::high_resolution_clock::now();

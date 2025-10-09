@@ -13,13 +13,6 @@ serial_port::serial_port() noexcept : d(std::make_unique<impl>())
   ct_panic(nullptr != d);
 }
 
-serial_port::~serial_port() noexcept = default;
-
-serial_port::serial_port(serial_port &&other) noexcept = default;
-
-serial_port &
-serial_port::operator=(serial_port &&other) noexcept = default;
-
 bool
 serial_port::is_open() const noexcept
 {
@@ -28,11 +21,53 @@ serial_port::is_open() const noexcept
 }
 
 bool
-serial_port::open(std::string_view device_path, serial_config config) noexcept
+serial_port::open(std::string_view device_path) noexcept
 {
   ct_panic(nullptr != d);
-  return d->open(device_path, std::move(config));
+  return d->open(device_path);
 }
+
+bool
+serial_port::set_baud_rate(std::uint32_t baud) noexcept
+{
+  ct_panic(nullptr != d);
+  return d->set_baud_rate(baud);
+}
+
+bool
+serial_port::set_data_width(data_width data) noexcept
+{
+  ct_panic(nullptr != d);
+  return d->set_data_width(data);
+}
+
+bool
+serial_port::set_stop_width(stop_width stop) noexcept
+{
+  ct_panic(nullptr != d);
+  return d->set_stop_width(stop);
+}
+
+bool
+serial_port::set_parity_mode(parity_mode parity) noexcept
+{
+  ct_panic(nullptr != d);
+  return d->set_parity_mode(parity);
+}
+
+bool
+serial_port::set_flow_control(flow_control flow) noexcept
+{
+  ct_panic(nullptr != d);
+  return d->set_flow_control(flow);
+}
+
+//bool
+//serial_port::set_blocking(bool value) noexcept
+//{
+//  ct_panic(nullptr != d);
+//  return d->set_blocking(value);
+//}
 
 void
 serial_port::close() noexcept
@@ -96,4 +131,8 @@ serial_port::cancel() noexcept
   ct_panic(nullptr != d);
   d->cancel();
 }
+
+serial_port::serial_port(serial_port &&other) noexcept            = default;
+serial_port &serial_port::operator=(serial_port &&other) noexcept = default;
+serial_port::~serial_port() noexcept                              = default;
 } /* namespace carbio */

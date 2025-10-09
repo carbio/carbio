@@ -1,6 +1,7 @@
 #include "serial_port_unix.h"
 
 #include "carbio/assert.h"
+#include <spdlog/spdlog.h>
 
 #include <fcntl.h>
 #include <sys/ioctl.h>
@@ -24,462 +25,655 @@ serial_port::impl::is_open() const noexcept
 }
 
 bool
-serial_port::impl::open(std::string_view path, serial_config config) noexcept
+serial_port::impl::open(std::string_view path) noexcept
 {
-  if (is_open()) close();
-  config_ = std::move(config);
-  fd_.reset(::open(path.data(), O_RDWR | O_NOCTTY));
+  spdlog::info("opening port at {}", path);
+  if (is_open())
+  {
+    spdlog::warn("port already open, closing port first");
+    close();
+  }
+  
+  /* open non-blocking serial */
+  fd_.reset(::open(path.data(), O_RDWR | O_NOCTTY | O_NONBLOCK));
   if (!is_open())
+  {
+    spdlog::error("could not open port {}: {}", path, strerror(errno));
     return false;
-  int flags = ::fcntl(fd_.native_handle(), F_GETFL, 0);
-  flags |= O_NONBLOCK;
-  fcntl(fd_.native_handle(), F_SETFL, flags);
-  store_port_state();
-  apply_config();
+  }
+
+  /* store current settings */
+  if (::tcgetattr(fd_.native_handle(), &oldtty_) != 0)
+  {
+    spdlog::error("Failed to get port attributes: {}", strerror(errno));
+    close();
+    return false;
+  }
+
+  /* initialize new settings from current state */
+  newtty_ = oldtty_; 
+
+  /* configure for raw mode */
+  cfmakeraw(&newtty_);
+
+  /* disable input processing */
+  /* flow control */
+  /* IXON: disable xon/xoff output flow control */
+  /* IXOFF: disable xon/xoff input flow control */
+  /* IXANY: don't allow any character to restart output */
+  newtty_.c_iflag &= ~(IXON | IXOFF | IXANY);
+  
+  /* break handling */
+  /* IGNBRK: don't ignore break conditions */
+  /* BRKINT: don't send sigint signal on break */
+  /* PARMRK: don't mark parity errors */
+  newtty_.c_iflag &= ~(IGNBRK | BRKINT | PARMRK);
+  
+  /* character processing */
+  /* ISTRIP: don't strip 8th bit */
+  /* INLCR: don't translate newline to carriage return */
+  /* IGNCR: don't ignore carriage return */
+  /* ICRNL: don't translate carriage return to newline */
+  newtty_.c_iflag &= ~(ISTRIP | INLCR | IGNCR | ICRNL);
+  
+  /* disable all output post-processing */
+  /* no cr->nl conversion */
+  /* no tab expansion */
+  /* no delay insertions */
+  newtty_.c_oflag &= ~OPOST;
+  
+  /* disable terminal line editing */
+  /* ECHO: don't echo received characters back */
+  /* ECHONL: don't echo newlines */
+  /* ECHOE: don't echo erase characters (backspace) */
+  /* ICANON: disable canonical mode */
+  /* ISIG: don't generate signals */
+  /* IEXTEN: disable extended input processing */
+  newtty_.c_lflag &= ~(ECHO | ECHONL | ECHOE | ICANON | ISIG | IEXTEN);
+  
+  /* enable essential hardware settings */
+  /* CLOCAL: ignore modem control lines */
+  /* CREAD: enable receiver (allow reading data) */
+  newtty_.c_cflag |= (CLOCAL | CREAD);
+  
+  /* non-blocking reads */
+  newtty_.c_cc[VTIME] = 0; /* 0=nonblocking read, 1=blocking read  */
+  newtty_.c_cc[VMIN] = 0;  /* 0=timeout, 1=return each byte */
+
+  // Baud rate will be set explicitly by caller after open()
+  // Set safe defaults for other parameters
+  set_data_width(data_width::_8);
+  set_stop_width(stop_width::_1);
+  set_parity_mode(parity_mode::none);
+  set_flow_control(flow_control::none);
+
+  flush();
+  spdlog::info("port open at {}", path);
   return true;
 }
+
+bool
+serial_port::impl::set_baud_rate(std::uint32_t baud) noexcept
+{
+  spdlog::info("setting baud rate {}", baud);
+
+  if (!is_open())
+  {
+    spdlog::warn("port not open");
+    return false;
+  }
+
+  speed_t speed = B0;
+  switch (baud)
+  {
+    /* 9600bps */
+    case 9600:
+    {
+      speed = B9600;
+      break;
+    }
+
+    /* 19200bps */
+    case 19200:
+    {
+      speed = B19200;
+      break;
+    }
+
+    /* 38400bps */
+    case 38400:
+    {
+      speed = B38400;
+      break;
+    }
+
+    /* 57600bps */
+    case 57600:
+    {
+      speed = B57600;
+      break;
+    }
+
+    /* 115200bps */
+    case 115200:
+    {
+      speed = B115200;
+      break;
+    }
+
+    /* invalid */
+    default:
+    {
+      spdlog::error("non-standard posix baud-rate {}", baud);
+      return false;
+    }
+  }
+
+  if (0 != ::cfsetospeed(&newtty_, speed))
+  {
+    spdlog::error("cfsetospeed({}, ...) failed: {}", baud, std::strerror(errno));
+    return false;
+  }
+
+  if (0 != ::cfsetispeed(&newtty_, speed))
+  {
+    spdlog::error("cfsetispeed({}, ...) failed: {}", baud, std::strerror(errno));
+    return false;
+  }
+
+  spdlog::info("baud rate set");
+  return apply_port_settings();
+}
+
+bool
+serial_port::impl::set_data_width(data_width data) noexcept
+{
+  spdlog::info("setting data width {}", static_cast<std::uint8_t>(data));
+
+  if (!is_open())
+  {
+    spdlog::warn("port not open");
+    return false;
+  }
+
+  /* set data width */
+  switch (data)
+  {
+    /* 5 bit */
+    case data_width::_5:
+    {
+      newtty_.c_cflag &= ~CSIZE;
+      newtty_.c_cflag |= CS5;
+      break;
+    }
+
+    /* 6 bit */
+    case data_width::_6:
+    {
+      newtty_.c_cflag &= ~CSIZE;
+      newtty_.c_cflag |= CS6;
+      break;
+    }
+
+    /* 7 bit */
+    case data_width::_7:
+    {
+      newtty_.c_cflag &= ~CSIZE;
+      newtty_.c_cflag |= CS7;
+      break;
+    }
+
+    /* 8 bit */
+    case data_width::_8:
+    {
+      newtty_.c_cflag &= ~CSIZE;
+      newtty_.c_cflag |= CS8;
+      break;
+    }
+
+    /* invalid */
+    default:
+    {
+      spdlog::error("data width is invalid");
+      return false;
+    }
+  }
+
+  spdlog::info("data width is set");
+  return apply_port_settings();
+}
+
+bool
+serial_port::impl::set_stop_width(stop_width stop) noexcept
+{
+  spdlog::info("setting stop width {}", static_cast<std::uint8_t>(stop));
+  if (!is_open())
+  {
+    spdlog::warn("port not open");
+    return false;
+  }
+
+  /* set stop width */
+  switch (stop)
+  {
+    /* 1 stop bit */
+    case stop_width::_1:
+    {
+      newtty_.c_cflag &= ~CSTOPB;
+      break;
+    }
+
+    /* 2 stop bits */
+    case stop_width::_2:
+    {
+      newtty_.c_cflag |= CSTOPB;
+      break;
+    }
+
+    /* invalid */
+    default:
+    {
+      spdlog::error("stop width is invalid");
+      return false;
+    }
+  }
+
+  spdlog::info("stop width is set");
+  return apply_port_settings();
+}
+
+bool
+serial_port::impl::set_parity_mode(parity_mode parity) noexcept
+{
+  spdlog::info("setting parity mode {}", static_cast<std::uint8_t>(parity));
+
+  if (!is_open())
+  {
+    spdlog::warn("port not open");
+    return false;
+  }
+
+  /* set parity width */
+  switch (parity)
+  {
+    /* none */
+    case parity_mode::none:
+    {
+      newtty_.c_cflag &= ~PARENB;
+      newtty_.c_iflag &= ~INPCK;
+      break;
+    }
+
+    /* odd */
+    case parity_mode::odd:
+    {
+      newtty_.c_cflag |= (PARODD | PARENB);
+      newtty_.c_iflag |= INPCK;
+      break;
+    }
+
+    /* even */
+    case parity_mode::even:
+    {
+      newtty_.c_cflag |= PARENB;
+      newtty_.c_cflag &= ~PARODD;
+      newtty_.c_iflag |= INPCK;
+      break;
+    }
+
+    /* invalid */
+    default:
+    {
+      spdlog::error("parity mode is invalid");
+      return false;
+    }
+  }
+
+  spdlog::info("parity mode is set");
+  return apply_port_settings();
+}
+
+bool
+serial_port::impl::set_flow_control(flow_control flow) noexcept
+{
+  spdlog::info("setting flow control {}", static_cast<std::uint8_t>(flow));
+
+  if (!is_open())
+  {
+    spdlog::warn("port not open");
+    return false;
+  }
+
+  /* set flow control */
+  switch (flow)
+  {
+    /* none */
+    case flow_control::none:
+    {
+      newtty_.c_cflag &= ~CRTSCTS;
+      newtty_.c_iflag &= static_cast<tcflag_t>(~(IXON | IXOFF | IXANY));
+      break;
+    }
+
+    /* software */
+    case flow_control::software:
+    {
+      newtty_.c_cflag &= ~CRTSCTS;
+      newtty_.c_iflag |= (IXON | IXOFF);
+      break;
+    }
+
+    /* hardware */
+    case flow_control::hardware:
+    {
+      newtty_.c_cflag |= CRTSCTS;
+      newtty_.c_iflag &= static_cast<tcflag_t>(~(IXON | IXOFF | IXANY));
+      break;
+    }
+
+    /* both */
+    case flow_control::both:
+    {
+      newtty_.c_cflag |= CRTSCTS;
+      newtty_.c_iflag |= (IXON | IXOFF);
+      break;
+    }
+
+    /* invalid */
+    default:
+    {
+      spdlog::error("flow control invalid");
+      return false;
+    }
+  }
+
+  spdlog::info("flow control set");
+  return apply_port_settings();
+}
+
+//bool
+//serial_port::impl::set_blocking(bool value) noexcept
+//{
+//  spdlog::info("setting blocking mode {}", value);
+//  newtty_.c_cc[VTIME] = value; /* 0=nonblocking read, 1=blocking read  */
+//  newtty_.c_cc[VMIN]  = 1;    
+//  spdlog::info("blocking mode set.");
+//  return true;
+//}
 
 void
 serial_port::impl::close() noexcept
 {
-  if (!is_open()) return;
-  restore_port_state();
+  spdlog::info("closing port...");
+  if (!is_open())
+  {
+    spdlog::warn("port not open");
+    return;
+  }
+  ::tcsetattr(fd_.native_handle(), TCSANOW, &oldtty_);
   fd_.reset();
+  spdlog::info("port closed");
 }
 
 std::size_t
 serial_port::impl::write_some(std::span<const std::uint8_t> buffer) noexcept
 {
-  if (!is_open()) return 0;
-  ssize_t bytes_written{};
-  bytes_written = ::write(fd_.native_handle(), buffer.data(), buffer.size());
-  return static_cast<std::size_t>(std::max<ssize_t>(bytes_written, 0));
+  if (!is_open())
+  {
+    spdlog::warn("port not open");
+    return 0;
+  }
+  ssize_t bytes_written = ::write(fd_.native_handle(), buffer.data(), buffer.size());
+  if (0 > bytes_written)
+  {
+    if (errno == EAGAIN)
+    {
+      if (spdlog::should_log(spdlog::level::trace))
+        spdlog::trace("write would block");
+      return 0;
+    }
+    spdlog::error("write failed {}", strerror(errno));
+    return 0;
+  }
+  if (spdlog::should_log(spdlog::level::trace))
+    spdlog::debug("written {} bytes", bytes_written);
+  return std::max<std::size_t>(0, bytes_written);
 }
 
 std::size_t
 serial_port::impl::read_some(std::span<std::uint8_t> buffer) noexcept
 {
-  if (!is_open()) return 0;
-  ssize_t bytes_read{};
-  bytes_read = ::read(fd_.native_handle(), buffer.data(), buffer.size());
-  return static_cast<std::size_t>(std::max<ssize_t>(bytes_read, 0));
+  if (!is_open())
+  {
+    spdlog::warn("port not open");
+    return 0;
+  }
+  const auto bytes_read = ::read(fd_.native_handle(), buffer.data(), buffer.size());
+  if (0 > bytes_read)
+  {
+    if (errno == EAGAIN)
+    {
+      if (spdlog::should_log(spdlog::level::trace))
+        spdlog::trace("no data available");
+      return 0;
+    }
+    spdlog::error("read failed {}", strerror(errno));
+    return 0;
+  }
+  if (spdlog::should_log(spdlog::level::trace))
+    spdlog::debug("read {} bytes", bytes_read);
+  return std::max<std::size_t>(0, bytes_read);
 }
 
 std::size_t
 serial_port::impl::write_exact(std::span<const std::uint8_t> buffer, std::chrono::milliseconds timeout) noexcept
 {
-  if (!is_open()) return 0;
-
-  std::size_t total = 0;
-  auto start = std::chrono::steady_clock::now();
-
-  while (total < buffer.size())
+  if (!is_open())
   {
-    // Calculate remaining timeout
-    auto elapsed = std::chrono::steady_clock::now() - start;
-    if (elapsed >= timeout) break;
+    spdlog::warn("port not open");
+    return 0;
+  }
 
-    auto remain_us = std::chrono::duration_cast<std::chrono::microseconds>(timeout - elapsed).count();
+  std::size_t total_bytes = 0;
+  auto        start_time = std::chrono::steady_clock::now();
 
-    // Wait for write readiness
-    fd_set writefds;
+  while (total_bytes < buffer.size())
+  {
+    auto elapsed_time = std::chrono::steady_clock::now() - start_time;
+    if (elapsed_time >= timeout)
+    {
+      spdlog::warn("write timed out {}/{}", total_bytes, buffer.size());
+      break;
+    }
+
+    fd_set writefds{};
     FD_ZERO(&writefds);
     FD_SET(fd_.native_handle(), &writefds);
 
-    struct timeval tv;
-    tv.tv_sec = remain_us / 1000000;
+    struct timeval tv{};
+    auto remain_us = std::chrono::duration_cast<std::chrono::microseconds>(timeout - elapsed_time).count();
+    tv.tv_sec  = remain_us / 1000000;
     tv.tv_usec = remain_us % 1000000;
 
-    int ret = ::select(fd_.native_handle() + 1, nullptr, &writefds, nullptr, &tv);
-    if (ret <= 0) break; // Timeout or error
-
-    // Write data
-    ssize_t n = ::write(fd_.native_handle(), buffer.data() + total, buffer.size() - total);
-    if (n > 0)
+    const auto select_result = ::select(fd_.native_handle() + 1, nullptr, &writefds, nullptr, &tv);
+    if (select_result < 0)
     {
-      total += n;
-    }
-    else if (n < 0 && errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK)
-    {
+      spdlog::error("write failed {}", strerror(errno));
       break;
     }
-  }
+    
+    if (select_result == 0)
+    {
+      spdlog::warn("write timed out {}/{} bytes", total_bytes, buffer.size());
+      break;
+    }
 
-  return total;
+    const auto bytes_written = ::write(fd_.native_handle(), buffer.data() + total_bytes, buffer.size() - total_bytes);
+    if (bytes_written < 0)
+    {
+      if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK)
+      {
+        spdlog::error("write error: {}", strerror(errno));
+        break;
+      }
+      // For EINTR/EAGAIN/EWOULDBLOCK, continue without adding to total_bytes
+      continue;
+    }
+    // Only add positive values
+    total_bytes += static_cast<std::size_t>(bytes_written);
+  }
+  if (spdlog::should_log(spdlog::level::trace))
+    spdlog::trace("write completed {}/{} bytes", total_bytes, buffer.size());
+  return total_bytes;
 }
 
 std::size_t
 serial_port::impl::read_exact(std::span<std::uint8_t> buffer, std::chrono::milliseconds timeout) noexcept
 {
-  if (!is_open()) return 0;
+  if (!is_open())
+  {
+    spdlog::warn("port not open");
+    return 0;
+  }
+  std::size_t total_bytes = 0;
+  auto        start_time = std::chrono::steady_clock::now();
 
-  std::size_t total = 0;
-  auto start = std::chrono::steady_clock::now();
-
-  while (total < buffer.size())
+  while (total_bytes < buffer.size())
   {
     // Calculate remaining timeout
-    auto elapsed = std::chrono::steady_clock::now() - start;
-    if (elapsed >= timeout) break;
+    auto elapsed_time = std::chrono::steady_clock::now() - start_time;
+    if (elapsed_time >= timeout)
+    {
+      spdlog::warn("read timed out {}/{}", total_bytes, buffer.size());
+      break;
+    }
 
-    auto remain_us = std::chrono::duration_cast<std::chrono::microseconds>(timeout - elapsed).count();
-
-    // Wait for data availability
-    fd_set readfds;
+    // Wait for data
+    fd_set readfds{};
     FD_ZERO(&readfds);
     FD_SET(fd_.native_handle(), &readfds);
 
-    struct timeval tv;
-    tv.tv_sec = remain_us / 1000000;
+    struct timeval tv{};
+    auto remain_us = std::chrono::duration_cast<std::chrono::microseconds>(timeout - elapsed_time).count();
+    tv.tv_sec  = remain_us / 1000000;
     tv.tv_usec = remain_us % 1000000;
 
-    int ret = ::select(fd_.native_handle() + 1, &readfds, nullptr, nullptr, &tv);
-    if (ret <= 0) break; // Timeout or error
-
-    // Read data
-    ssize_t n = ::read(fd_.native_handle(), buffer.data() + total, buffer.size() - total);
-    if (n > 0)
+    const auto select_result = ::select(fd_.native_handle() + 1, &readfds, nullptr, nullptr, &tv);
+    if (select_result < 0)
     {
-      total += n;
-    }
-    else if (n < 0 && errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK)
-    {
+      spdlog::error("select failed during read: {}", strerror(errno));
       break;
     }
+    if (select_result == 0)
+    {
+      spdlog::warn("select timed out: {}/{}", total_bytes, buffer.size());
+      break;
+    }
+    
+    const auto read_bytes = ::read(fd_.native_handle(), buffer.data() + total_bytes, buffer.size() - total_bytes);
+    if (0 > read_bytes && errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK)
+    {
+      spdlog::error("read error: {}", strerror(errno));
+      break;
+    }
+    if (0 < read_bytes)
+    {
+      total_bytes += static_cast<std::size_t>(read_bytes);
+    }
   }
-
-  return total;
+  if (spdlog::should_log(spdlog::level::trace))
+    spdlog::trace("read completed {}/{} bytes", total_bytes, buffer.size());
+  return total_bytes;
 }
 
 std::size_t
 serial_port::impl::available() const noexcept
 {
-  if (!is_open()) return 0;
+  if (!is_open())
+  {
+    spdlog::warn("port not open");
+    return 0;
+  }
   int bytes = 0;
   ::ioctl(fd_.native_handle(), FIONREAD, &bytes);
-  return bytes >= 0 ? static_cast<std::size_t>(bytes) : 0;
+  if (spdlog::should_log(spdlog::level::trace))
+    spdlog::trace("available {} bytes", bytes);
+  return static_cast<std::size_t>(std::max(0, bytes));
 }
 
 void
 serial_port::impl::flush() noexcept
 {
-  if (!is_open()) return ;
+  spdlog::trace("flushing...");
+  if (!is_open())
+  {
+    spdlog::warn("port not open");
+    return;
+  }
   ::tcflush(fd_.native_handle(), TCIOFLUSH);
+  spdlog::trace("flushed");
 }
 
 void
 serial_port::impl::drain() noexcept
 {
-  if (!is_open()) return ;
+  spdlog::trace("draining...");
+  if (!is_open())
+  {
+    spdlog::warn("port not open");
+    return;
+  }
   ::tcdrain(fd_.native_handle());
+  spdlog::trace("drained");
 }
 
 void
 serial_port::impl::cancel() noexcept
 {
-  if (!is_open()) return ;
+  spdlog::trace("cancelling...");
+  if (!is_open())
+  {
+    spdlog::warn("port not open");
+    return;
+  }
   ::tcflush(fd_.native_handle(), TCIOFLUSH);
+  spdlog::trace("cancelled");
 }
 
-void
-serial_port::impl::apply_config() noexcept
+bool
+serial_port::impl::apply_port_settings() noexcept
 {
-  if (!is_open()) return ;
-  init_port_changes();
-  apply_baud_rate(config_.baud_rate);
-  apply_data_bits(std::to_underlying(config_.data_bits));
-  apply_stop_bits(std::to_underlying(config_.stop_bits));
-  apply_parity(std::to_underlying(config_.parity));
-  apply_flow_control(std::to_underlying(config_.flow));
-  apply_timeouts();
-  flush();
-  apply_port_changes();
-}
-
-void
-serial_port::impl::apply_baud_rate(std::uint32_t baud_rate) noexcept
-{
-  if (!is_open()) return;
-
-  speed_t speed = B0;
-  bool is_standard = true;
-
-  // Try standard POSIX baud rates first
-  switch (baud_rate)
+  spdlog::debug("applying port settings...");
+  if (!is_open())
   {
-    case 9600:    speed = B9600;    break;
-    case 19200:   speed = B19200;   break;
-    case 38400:   speed = B38400;   break;
-    case 57600:   speed = B57600;   break;
-    case 115200:  speed = B115200;  break;
-#ifdef B230400
-    case 230400:  speed = B230400;  break;
-#endif
-#ifdef B460800
-    case 460800:  speed = B460800;  break;
-#endif
-#ifdef B500000
-    case 500000:  speed = B500000;  break;
-#endif
-#ifdef B576000
-    case 576000:  speed = B576000;  break;
-#endif
-#ifdef B921600
-    case 921600:  speed = B921600;  break;
-#endif
-#ifdef B1000000
-    case 1000000: speed = B1000000; break;
-#endif
-    default:
-      is_standard = false;
-      break;
+    spdlog::warn("port not open");
+    return false;
   }
-
-  if (is_standard)
+  if (0 != ::tcsetattr(fd_.native_handle(), TCSANOW, &newtty_))
   {
-    // Use standard termios API
-    ::cfsetospeed(&newtty_, speed);
-    ::cfsetispeed(&newtty_, speed);
+    spdlog::error("could not apply port changes: {}", strerror(errno));
+    return false;
   }
-  else
+  spdlog::debug("port settings applied");
+  return true;
+}
+
+bool
+serial_port::impl::restore_port_settings() noexcept
+{
+  spdlog::debug("restoring port settings...");
+  if (!is_open())
   {
-    // Non-standard baud rate
-    bool custom_success = false;
-
-#ifdef __linux__
-    // Linux-specific: Try custom baud rate via ioctl
-    struct serial_struct serial;
-    if (::ioctl(fd_.native_handle(), TIOCGSERIAL, &serial) == 0)
-    {
-      serial.flags &= ~ASYNC_SPD_MASK;
-      serial.flags |= ASYNC_SPD_CUST;
-      serial.custom_divisor = serial.baud_base / baud_rate;
-
-      if (::ioctl(fd_.native_handle(), TIOCSSERIAL, &serial) == 0)
-      {
-        // Set to 38400 as placeholder (Linux driver uses custom_divisor)
-        ::cfsetospeed(&newtty_, B38400);
-        ::cfsetispeed(&newtty_, B38400);
-        custom_success = true;
-      }
-    }
-#endif
-
-    // If custom baud rate failed, fall back to closest standard rate
-    if (!custom_success)
-    {
-      // Default to 57600 for unsupported rates
-      ::cfsetospeed(&newtty_, B57600);
-      ::cfsetispeed(&newtty_, B57600);
-    }
+    spdlog::warn("port not open");
+    return false;
   }
+  if (0 != ::tcsetattr(fd_.native_handle(), TCSANOW, &oldtty_))
+  {
+    spdlog::error("could not restore port changes: {}", strerror(errno));
+    return false;
+  }
+  spdlog::debug("port settings restored");
+  return true;
 }
 
-void
-serial_port::impl::apply_data_bits(std::uint8_t data_bits) noexcept
-{
-  if (!is_open()) return ;
-
-  /* set data bits */
-  switch (data_bits)
-    {
-      /* 5 bit */
-      case 5:
-        {
-          newtty_.c_cflag &= ~CSIZE;
-          newtty_.c_cflag |= CS5;
-          break;
-        }
-
-      /* 6 bit */
-      case 6:
-        {
-          newtty_.c_cflag &= ~CSIZE;
-          newtty_.c_cflag |= CS6;
-          break;
-        }
-
-      /* 7 bit */
-      case 7:
-        {
-          newtty_.c_cflag &= ~CSIZE;
-          newtty_.c_cflag |= CS7;
-          break;
-        }
-
-      /* 8 bit */
-      case 8:
-        {
-          newtty_.c_cflag &= ~CSIZE;
-          newtty_.c_cflag |= CS8;
-          break;
-        }
-
-      /* invalid param */
-      default:
-        {
-          throw std::runtime_error("invalid data width setting");
-        }
-    }
-}
-
-void
-serial_port::impl::apply_stop_bits(std::uint8_t stop_bits) noexcept
-{
-  if (!is_open()) return ;
-
-  /* set stop bits */
-  switch (stop_bits)
-    {
-      /* 1 stop bit */
-      case 1:
-        {
-          newtty_.c_cflag &= ~CSTOPB;
-          break;
-        }
-
-      /* 2 stop bits */
-      case 2:
-        {
-          newtty_.c_cflag |= CSTOPB;
-          break;
-        }
-
-      /* invalid param */
-      default:
-        {
-          throw std::runtime_error("invalid stop width setting");
-        }
-    }
-}
-
-void
-serial_port::impl::apply_parity(std::uint8_t parity) noexcept
-{
-  if (!is_open()) return ;
-
-  /* set parity bits */
-  switch (parity)
-    {
-      /* none */
-      case 1:
-        {
-          newtty_.c_cflag &= ~PARENB;
-          newtty_.c_iflag &= ~INPCK;
-          break;
-        }
-
-      /* odd */
-      case 2:
-        {
-          newtty_.c_cflag |= (PARODD | PARENB);
-          newtty_.c_iflag |= INPCK;
-          break;
-        }
-
-      /* even */
-      case 3:
-        {
-          newtty_.c_cflag |= PARENB;
-          newtty_.c_cflag &= ~PARODD;
-          newtty_.c_iflag |= INPCK;
-          break;
-        }
-
-      /* invalid */
-      default:
-        {
-          throw std::runtime_error("invalid parity setting");
-        }
-    }
-}
-
-void
-serial_port::impl::apply_flow_control(std::uint8_t flow) noexcept
-{
-  if (!is_open()) return ;
-
-  /* set flow control */
-  switch (flow)
-    {
-      /* none */
-      case 0:
-        {
-          newtty_.c_cflag &= ~CRTSCTS;
-          newtty_.c_iflag &= static_cast<tcflag_t>(~(IXON | IXOFF | IXANY));
-          break;
-        }
-
-      /* software */
-      case 1:
-        {
-          newtty_.c_cflag &= ~CRTSCTS;
-          newtty_.c_iflag |= (IXON | IXOFF);
-          break;
-        }
-
-      /* hardware */
-      case 2:
-        {
-          newtty_.c_cflag |= CRTSCTS;
-          newtty_.c_iflag &= static_cast<tcflag_t>(~(IXON | IXOFF | IXANY));
-          break;
-        }
-
-      /* both */
-      case 3:
-        {
-          newtty_.c_cflag |= CRTSCTS;
-          newtty_.c_iflag |= (IXON | IXOFF);
-          break;
-        }
-
-      /* invalid */
-      default:
-        {
-          throw std::runtime_error("invalid flow control setting");
-        }
-    }
-}
-
-void
-serial_port::impl::apply_timeouts() noexcept
-{
-  if (!is_open()) return ;
-  newtty_.c_cc[VMIN]  = 1; /* 0=timeout, 1=return each byte */
-  newtty_.c_cc[VTIME] = 0; /* 0=nonblocking read, 1=blocking read  */
-}
-
-void
-serial_port::impl::store_port_state() noexcept
-{
-  if (!is_open()) return ;
-  ::tcgetattr(fd_.native_handle(), &oldtty_);
-}
-
-void
-serial_port::impl::restore_port_state() noexcept
-{
-  if (!is_open()) return ;
-  ::tcsetattr(fd_.native_handle(), TCSANOW, &oldtty_);
-}
-
-void
-serial_port::impl::init_port_changes() noexcept
-{
-  if (!is_open()) return ;
-  ::tcgetattr(fd_.native_handle(), &newtty_);
-  cfmakeraw(&newtty_);
-
-  // Enable receiver and ignore modem control lines
-  // cfmakeraw() does NOT set these - they must be set explicitly
-  newtty_.c_cflag |= (CREAD | CLOCAL);
-}
-
-void
-serial_port::impl::apply_port_changes() noexcept
-{
-  if (!is_open()) return ;
-  ::tcsetattr(fd_.native_handle(), TCSANOW, &newtty_);
-}
 } // namespace carbio

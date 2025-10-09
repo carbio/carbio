@@ -65,8 +65,8 @@ public:
   [[nodiscard]] void_result turn_led_off() noexcept;
 
   // --- security
-  [[nodiscard]] void_result set_device_password(std::uint32_t new_password) noexcept;
-  [[nodiscard]] void_result verify_device_password() noexcept;
+  [[nodiscard]] void_result set_device_password(std::uint32_t password = 0x00000000) noexcept;
+  [[nodiscard]] void_result verify_device_password(std::uint32_t password = 0x00000000) noexcept;
   [[nodiscard]] void_result set_device_address(std::uint32_t new_address) noexcept;
 
   // --- low-level ops
