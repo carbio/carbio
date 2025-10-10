@@ -4,7 +4,7 @@ import QtQuick.Layouts
 
 Rectangle {
     id: fingerprintSetupDialog
-    anchors.fill: parent
+    anchors.centerIn: parent
     color: "#2A2A2A"
     radius: 15
     border.color: "#01E4E0"
@@ -326,27 +326,27 @@ Rectangle {
         EnrollDialog {
             id: enrollDialog
         }
-        
+
         VerifyDialog {
             id: verifyDialog
         }
-        
+
         QueryDialog {
             id: queryDialog
         }
-        
+
         DeleteDialog {
             id: deleteDialog
         }
-        
+
         ClearConfirmDialog {
             id: clearDialog
         }
-        
+
         LEDControlDialog {
             id: ledDialog
         }
-        
+
         SystemConfigDialog {
             id: configDialog
         }

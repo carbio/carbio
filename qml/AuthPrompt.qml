@@ -48,8 +48,8 @@ Rectangle {
 
     Behavior on opacity {
         NumberAnimation {
-            duration: 400
-            easing.type: Easing.InOutCubic
+            duration: 300
+            easing.type: Easing.OutCubic
         }
     }
 
@@ -89,14 +89,12 @@ Rectangle {
         }
     ]
 
-    // Smooth transitions between states with cross-fade and subtle scale effect
+    // Instant transitions for real-time feedback
     transitions: [
         Transition {
             from: "*"
             to: "*"
-
             SequentialAnimation {
-                // Fade out old state and fade in new state simultaneously with scale
                 ParallelAnimation {
                     NumberAnimation {
                         properties: "opacity,scale"
@@ -104,7 +102,6 @@ Rectangle {
                         easing.type: Easing.InOutCubic
                     }
                 }
-                // Update visibility after opacity animation completes
                 PropertyAction { property: "visible" }
             }
         }

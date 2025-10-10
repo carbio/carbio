@@ -113,7 +113,7 @@ void RadialBar::paint(QPainter *painter)
 
 void RadialBar::setSize(qreal size)
 {
-    if (!carbio::approximatelyEqual(m_Size, size))
+    if (!carbio::approximately_equal(m_Size, size))
     {
         m_Size = size;
         emit sizeChanged();
@@ -122,7 +122,7 @@ void RadialBar::setSize(qreal size)
 
 void RadialBar::setStartAngle(qreal angle)
 {
-    if (!carbio::approximatelyEqual(m_StartAngle, angle))
+    if (!carbio::approximately_equal(m_StartAngle, angle))
     {
         m_StartAngle = angle;
         emit startAngleChanged();
@@ -131,7 +131,7 @@ void RadialBar::setStartAngle(qreal angle)
 
 void RadialBar::setSpanAngle(qreal angle)
 {
-    if (!carbio::approximatelyEqual(m_SpanAngle, angle))
+    if (!carbio::approximately_equal(m_SpanAngle, angle))
     {
         m_SpanAngle = angle;
         emit spanAngleChanged();
@@ -140,7 +140,7 @@ void RadialBar::setSpanAngle(qreal angle)
 
 void RadialBar::setMinValue(qreal value)
 {
-    if (!carbio::approximatelyEqual(m_MinValue, value))
+    if (!carbio::approximately_equal(m_MinValue, value))
     {
         m_MinValue = value;
         emit minValueChanged();
@@ -149,7 +149,7 @@ void RadialBar::setMinValue(qreal value)
 
 void RadialBar::setMaxValue(qreal value)
 {
-    if (!carbio::approximatelyEqual(m_MaxValue, value))
+    if (!carbio::approximately_equal(m_MaxValue, value))
     {
         m_MaxValue = value;
         emit maxValueChanged();
@@ -158,7 +158,7 @@ void RadialBar::setMaxValue(qreal value)
 
 void RadialBar::setValue(qreal value)
 {
-    if (!carbio::approximatelyEqual(m_Value, value))
+    if (!carbio::approximately_equal(m_Value, value))
     {
         m_Value = value;
         update();
@@ -168,7 +168,7 @@ void RadialBar::setValue(qreal value)
 
 void RadialBar::setDialWidth(qreal width)
 {
-    if (!carbio::approximatelyEqual(m_DialWidth, width))
+    if (!carbio::approximately_equal(static_cast<qreal>(m_DialWidth), width))
     {
         m_DialWidth = static_cast<int>(width);
         emit dialWidthChanged();

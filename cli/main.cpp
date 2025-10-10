@@ -5,8 +5,13 @@
 #include "controller.h"
 #include "radialbar.h"
 
+#include <spdlog/spdlog.h>
+
+
 int main(int argc, char *argv[])
 {
+  spdlog::set_pattern("[%H:%M:%S %z] [%n] [%^---%L---%$] [thread %t] %v");
+  spdlog::set_level(spdlog::level::warn);
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
 #endif

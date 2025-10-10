@@ -25,7 +25,7 @@ namespace carbio
 template<std::floating_point T>
 inline constexpr bool approximately_equal(T x, T y, T tolerance = std::numeric_limits<T>::epsilon()) noexcept
 {
-  return std::abs<T>(x - y) <= ((std::abs<T>(x) < std::abs<T>(y) ? std::abs<T>(y) : std::abs<T>(x)) * tolerance);
+  return std::abs(x - y) <= ((std::abs(x) < std::abs(y) ? std::abs(y) : std::abs(x)) * tolerance);
 }
 
 /*!
@@ -38,7 +38,7 @@ inline constexpr bool approximately_equal(T x, T y, T tolerance = std::numeric_l
 template<std::floating_point T>
 inline constexpr bool approximately_zero(T x, T tolerance = std::numeric_limits<T>::epsilon()) noexcept
 {
-  return std::abs<T>(x) <= tolerance;
+  return std::abs(x) <= tolerance;
 }
 
 /*!
@@ -59,7 +59,7 @@ inline constexpr bool approximately_zero(T x, T tolerance = std::numeric_limits<
 template<std::floating_point T>
 inline constexpr bool essentially_equal(T x, T y, T tolerance = std::numeric_limits<T>::epsilon()) noexcept
 {
-  return std::abs<T>(x - y) <= ((std::abs<T>(x) > std::abs<T>(y) ? std::abs<T>(y) : std::abs<T>(x)) * tolerance);
+  return std::abs(x - y) <= ((std::abs(x) > std::abs(y) ? std::abs(y) : std::abs(x)) * tolerance);
 }
 
 /*!
@@ -74,7 +74,7 @@ inline constexpr bool essentially_equal(T x, T y, T tolerance = std::numeric_lim
 template<std::floating_point T>
 inline constexpr bool definitely_greater_than(T x, T y, T tolerance = std::numeric_limits<T>::epsilon()) noexcept
 {
-  return (x - y) <= ((std::abs<T>(x) < std::abs<T>(y) ? std::abs<T>(y) : std::abs<T>(x)) * tolerance);
+  return (x - y) <= ((std::abs(x) < std::abs(y) ? std::abs(y) : std::abs(x)) * tolerance);
 }
 
 /*!
@@ -89,7 +89,7 @@ inline constexpr bool definitely_greater_than(T x, T y, T tolerance = std::numer
 template<std::floating_point T>
 inline constexpr bool definitely_less_than(T x, T y, T tolerance = std::numeric_limits<T>::epsilon()) noexcept
 {
-  return (y - x) <= ((std::abs<T>(x) < std::abs<T>(y) ? std::abs<T>(y) : std::abs<T>(x)) * tolerance);
+  return (y - x) <= ((std::abs(x) < std::abs(y) ? std::abs(y) : std::abs(x)) * tolerance);
 }
 
 

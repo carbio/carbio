@@ -555,7 +555,7 @@ void configureSystem(fingerprint_sensor &sensor)
 int main(int argc, char *argv[])
 {
   spdlog::set_pattern("[%H:%M:%S %z] [%n] [%^---%L---%$] [thread %t] %v");
-  spdlog::set_level(spdlog::level::trace);
+  spdlog::set_level(spdlog::level::warn);
 
   fingerprint_sensor sensor;
   if (!sensor.open("/dev/ttyAMA0"))

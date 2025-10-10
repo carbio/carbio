@@ -1,4 +1,4 @@
-find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui Qml Quick Quick3D Core5Compat)
+find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui Qml Quick)
 
 qt_standard_project_setup()
 
@@ -17,6 +17,8 @@ qt_add_executable(carbiod
   session_manager.cpp
   audit_logger.h
   audit_logger.cpp
+  profile_manager.h
+  profile_manager.cpp
   security_types.h
   ${QRC_QML}
   ${QRC_RES}
@@ -27,14 +29,15 @@ target_include_directories(carbiod PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+find_package(OpenSSL REQUIRED)
+
 target_link_libraries(carbiod PRIVATE
   Qt6::Core
   Qt6::Gui
   Qt6::Qml
   Qt6::Quick
-  Qt6::Quick3D
-  Qt6::Core5Compat
   carbio
+  OpenSSL::Crypto
 )
 
 set_target_properties(carbiod PROPERTIES AUTOMOC TRUE)

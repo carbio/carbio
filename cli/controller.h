@@ -4,10 +4,9 @@
 #include "admin_authenticator.h"
 #include "audit_logger.h"
 #include "auth_types.h"
-#include "carbio/fingerprint.h"
+#include "profile_manager.h"
 #include "security_types.h"
 #include "session_manager.h"
-
 #include <QObject>
 #include <QString>
 #include <QTimer>
@@ -21,6 +20,12 @@
 #pragma GCC diagnostic ignored "-Wsuggest-final-types"   // QML type requires override and cannot be made final
 #pragma GCC diagnostic ignored "-Wsuggest-final-methods" // QML method requires override and cannot be made final
 #endif
+
+namespace carbio
+{
+class fingerprint_sensor;
+}
+
 class Controller : public QObject
 {
   Q_OBJECT
@@ -42,47 +47,58 @@ public:
   ~Controller() override;
 
   // Property getters
-  [[nodiscard]] int authState() const
+  [[nodiscard]] int
+  authState() const
   {
     return static_cast<int>(m_authState);
   }
-  [[nodiscard]] int failedAttempts() const
+  [[nodiscard]] int
+  failedAttempts() const
   {
     return m_failedAttempts;
   }
-  [[nodiscard]] int lockoutSeconds() const
+  [[nodiscard]] int
+  lockoutSeconds() const
   {
     return m_lockoutSeconds;
   }
-  [[nodiscard]] int maxLockoutSeconds() const
+  [[nodiscard]] int
+  maxLockoutSeconds() const
   {
     return LOCKOUT_DURATION_SEC;
   }
-  [[nodiscard]] QString driverName() const
+  [[nodiscard]] QString
+  driverName() const
   {
     return m_driverName;
   }
-  [[nodiscard]] bool sensorAvailable() const
+  [[nodiscard]] bool
+  sensorAvailable() const
   {
     return m_sensorAvailable;
   }
-  [[nodiscard]] bool isProcessing() const
+  [[nodiscard]] bool
+  isProcessing() const
   {
     return m_isProcessing;
   }
-  [[nodiscard]] int templateCount() const
+  [[nodiscard]] int
+  templateCount() const
   {
     return m_templateCount;
   }
-  [[nodiscard]] QString operationProgress() const
+  [[nodiscard]] QString
+  operationProgress() const
   {
     return m_operationProgress;
   }
-  [[nodiscard]] bool isAdminMenuAccessible() const
+  [[nodiscard]] bool
+  isAdminMenuAccessible() const
   {
     return m_isAdminMenuAccessible;
   }
-  [[nodiscard]] QString adminAccessToken() const
+  [[nodiscard]] QString
+  adminAccessToken() const
   {
     return m_adminAccessToken;
   }
@@ -98,22 +114,28 @@ public:
   Q_INVOKABLE void revokeAdminAccess();
   Q_INVOKABLE bool isAdminFingerprint(int fingerprintId) const;
 
+  // Profile management
+  Q_INVOKABLE bool addDriver(const QString &name, bool isAdmin);
+  Q_INVOKABLE bool deleteDriver(int id);
+  Q_INVOKABLE QString getDriverName(int id) const;
+  Q_INVOKABLE QVariantList getAllDrivers() const;
+
 public slots:
-    void enrollFingerprint(int id);
-    void findFingerprint();
-    void identifyFingerprint();
-    void verifyFingerprint(int id);
-    void queryTemplate(int id);
-    void deleteFingerprint(int id);
-    void clearDatabase();
-    void turnLedOn();
-    void turnLedOff();
-    void toggleLed();
-    void setBaudRate(int baudChoice);
-    void setSecurityLevel(int level);
-    void setPacketSize(int size);
-    void softResetSensor();
-    void showSystemSettings();
+  void enrollFingerprint(int id);
+  void findFingerprint();
+  void identifyFingerprint();
+  void verifyFingerprint(int id);
+  void queryTemplate(int id);
+  void deleteFingerprint(int id);
+  void clearDatabase();
+  void turnLedOn();
+  void turnLedOff();
+  void toggleLed();
+  void setBaudRate(int baudChoice);
+  void setSecurityLevel(int level);
+  void setPacketSize(int size);
+  void softResetSensor();
+  void showSystemSettings();
 
 signals:
   // Property change signals
@@ -158,18 +180,18 @@ private:
   QString lookupDriverName(uint16_t fingerId);
   void    lockDashboardAfterAdminFailure();
 
-  std::unique_ptr<carbio::FingerprintSensor> m_sensor;
-  AuthState                                  m_authState;
-  QString                                    m_driverName;
-  int                                        m_failedAttempts;
-  int                                        m_lockoutSeconds;
-  bool                                       m_sensorAvailable;
-  bool                                       m_isProcessing;
-  int                                        m_templateCount;
-  QString                                    m_operationProgress;
-  bool                                       m_manualLedControl;
-  bool                                       m_isAdminMenuAccessible;
-  QString                                    m_adminAccessToken;
+  std::unique_ptr<carbio::fingerprint_sensor> m_sensor;
+  AuthState                                   m_authState;
+  QString                                     m_driverName;
+  int                                         m_failedAttempts;
+  int                                         m_lockoutSeconds;
+  bool                                        m_sensorAvailable;
+  bool                                        m_isProcessing;
+  int                                         m_templateCount;
+  QString                                     m_operationProgress;
+  bool                                        m_manualLedControl;
+  bool                                        m_isAdminMenuAccessible;
+  QString                                     m_adminAccessToken;
 
   QTimer *m_scanTimer;
   QTimer *m_lockoutTimer;
@@ -183,6 +205,7 @@ private:
   std::unique_ptr<carbio::security::AdminAuthenticator> m_adminAuth;
   std::unique_ptr<carbio::security::SessionManager>     m_sessionManager;
   std::unique_ptr<carbio::security::AuditLogger>        m_auditLogger;
+  std::unique_ptr<carbio::security::ProfileManager>     m_profileManager;
 
   // Admin authentication state
   enum class AdminAuthPhase : uint8_t
@@ -211,9 +234,10 @@ private:
   static constexpr int LOCKOUT_DURATION_SEC = 20;
 
   // Adaptive polling configuration
-  static constexpr int POLL_INTERVAL_MIN     = 1;    // Minimum interval (ms) - responsive
-  static constexpr int POLL_INTERVAL_MAX     = 64;   // Maximum interval (ms) - power saving
-  static constexpr int POLL_BACKOFF_FACTOR   = 2;    // Exponential backoff multiplier
+  static constexpr int POLL_INTERVAL_MIN   = 1;  // Minimum interval (ms)
+  static constexpr int POLL_INTERVAL_MAX   = 16; // Maximum interval (ms)
+  static constexpr int POLL_BACKOFF_FACTOR = 2;  // Exponential backoff multiplier
+  static constexpr int POLL_BACKOFF_THRESHOLD = 3; // Start backoff after N misses
 };
 #if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic pop

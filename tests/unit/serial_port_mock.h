@@ -12,9 +12,8 @@ class serial_port_mock
 {
 public:
   MOCK_METHOD(bool, is_open, (), (const, noexcept));
-  MOCK_METHOD(void, open, (std::string_view path, serial_config configuration), (noexcept));
+  MOCK_METHOD(void, open, (std::string_view path), (noexcept));
   MOCK_METHOD(void, close, (), (noexcept));
-
   MOCK_METHOD(std::size_t, write_some, (std::span<const std::uint8_t> data), (noexcept));
   MOCK_METHOD(std::size_t, read_some, (std::span<std::uint8_t> data), (noexcept));
   MOCK_METHOD(std::size_t, write_exact, (std::span<const std::uint8_t> data, std::chrono::milliseconds timeout), (noexcept));
