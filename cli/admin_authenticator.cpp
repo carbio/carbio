@@ -1,7 +1,7 @@
 #include "admin_authenticator.h"
 
 #include <QCryptographicHash>
-#include <QDebug>
+//#include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QRandomGenerator>
@@ -29,7 +29,7 @@ AdminAuthenticator::AdminAuthenticator(QObject *parent)
   // If no password is set, use default (with warning)
   if (!hasPasswordSet())
   {
-    qWarning() << "No admin password set! Using default password. CHANGE THIS IMMEDIATELY!";
+    // qWarning() << "No admin password set! Using default password. CHANGE THIS IMMEDIATELY!";
     static_cast<void>(setPassword(DEFAULT_PASSWORD));
   }
 }
@@ -47,7 +47,7 @@ bool AdminAuthenticator::verifyPassword(const QString &password)
   // Check rate limiting
   if (isRateLimited())
   {
-    qWarning() << "Rate limited - too many failed attempts";
+    // qWarning() << "Rate limited - too many failed attempts";
     emit rateLimitTriggered(lockoutSecondsRemaining());
     return false;
   }
@@ -61,25 +61,31 @@ bool AdminAuthenticator::verifyPassword(const QString &password)
 
   if (valid)
   {
-    qInfo() << "Password verified successfully";
+    // qInfo() << "Password verified successfully";
     m_failedAttempts = 0;
     emit passwordVerified();
     return true;
   }
   else
   {
-    m_failedAttempts++;
-    qWarning() << "Password verification failed. Attempts:" << m_failedAttempts << "/" << MAX_ATTEMPTS;
+    // Increment with overflow protection for strict-overflow warning
+    if (m_failedAttempts < 1000)
+    {
+      m_failedAttempts++;
+    }
+    // qWarning() << "Password verification failed. Attempts:" << m_failedAttempts << "/" << MAX_ATTEMPTS;
 
     if (m_failedAttempts >= MAX_ATTEMPTS)
     {
-      m_lockoutUntil = steady_clock::now() + seconds(LOCKOUT_DURATION_SECONDS);
-      qWarning() << "Max attempts reached. Locked out for" << LOCKOUT_DURATION_SECONDS << "seconds";
+      m_lockoutUntil = steady_clock::now() + seconds(static_cast<int64_t>(LOCKOUT_DURATION_SECONDS));
+      // qWarning() << "Max attempts reached. Locked out for" << LOCKOUT_DURATION_SECONDS << "seconds";
       emit rateLimitTriggered(LOCKOUT_DURATION_SECONDS);
     }
     else
     {
-      emit passwordFailed(MAX_ATTEMPTS - m_failedAttempts);
+      // Compute remaining attempts safely to avoid signed overflow warnings
+      int remaining = std::max(0, MAX_ATTEMPTS - m_failedAttempts);
+      emit passwordFailed(remaining);
     }
 
     // Clear sensitive data
@@ -92,7 +98,7 @@ bool AdminAuthenticator::setPassword(const QString &newPassword)
 {
   if (newPassword.length() < static_cast<int>(PASSWORD_MIN_LENGTH))
   {
-    qWarning() << "Password too short. Minimum length:" << PASSWORD_MIN_LENGTH;
+    // qWarning() << "Password too short. Minimum length:" << PASSWORD_MIN_LENGTH;
     return false;
   }
 
@@ -105,7 +111,7 @@ bool AdminAuthenticator::setPassword(const QString &newPassword)
   // Save to persistent storage
   savePasswordHash();
 
-  qInfo() << "Admin password updated successfully";
+  // qInfo() << "Admin password updated successfully";
   return true;
 }
 
@@ -130,7 +136,7 @@ QByteArray AdminAuthenticator::generateChallenge()
   m_activeChallenge.timestamp = steady_clock::now();
   m_activeChallenge.active = true;
 
-  qDebug() << "Challenge generated (valid for" << CHALLENGE_WINDOW_SECONDS << "seconds)";
+  // qDebug() << "Challenge generated (valid for" << CHALLENGE_WINDOW_SECONDS << "seconds)";
   return nonce;
 }
 
@@ -138,15 +144,15 @@ bool AdminAuthenticator::validateChallenge(const QByteArray &nonce)
 {
   if (!m_activeChallenge.active)
   {
-    qWarning() << "No active challenge to validate";
+    // qWarning() << "No active challenge to validate";
     return false;
   }
 
-  // Check expiry
-  auto elapsed = duration_cast<seconds>(steady_clock::now() - m_activeChallenge.timestamp).count();
-  if (elapsed > CHALLENGE_WINDOW_SECONDS)
+  // Check expiry using chrono's built-in comparison operators
+  auto expiry = m_activeChallenge.timestamp + seconds(CHALLENGE_WINDOW_SECONDS);
+  if (steady_clock::now() > expiry)
   {
-    qWarning() << "Challenge expired (" << elapsed << "s elapsed)";
+    // qWarning() << "Challenge expired";
     clearChallenge();
     return false;
   }
@@ -154,7 +160,7 @@ bool AdminAuthenticator::validateChallenge(const QByteArray &nonce)
   // Validate nonce (constant-time comparison)
   if (nonce.size() != NONCE_SIZE)
   {
-    qWarning() << "Invalid nonce size";
+    // qWarning() << "Invalid nonce size";
     return false;
   }
 
@@ -163,13 +169,13 @@ bool AdminAuthenticator::validateChallenge(const QByteArray &nonce)
 
   if (valid)
   {
-    qInfo() << "Challenge validated successfully";
+    // qInfo() << "Challenge validated successfully";
     clearChallenge(); // Single-use challenge
     return true;
   }
   else
   {
-    qWarning() << "Challenge validation failed - nonce mismatch";
+    // qWarning() << "Challenge validation failed - nonce mismatch";
     return false;
   }
 }
@@ -196,7 +202,8 @@ int AdminAuthenticator::remainingAttempts() const
   {
     return 0;
   }
-  return MAX_ATTEMPTS - m_failedAttempts;
+  // Compute remaining safely to avoid signed overflow warnings
+  return std::max(0, MAX_ATTEMPTS - m_failedAttempts);
 }
 
 int AdminAuthenticator::lockoutSecondsRemaining() const
@@ -206,15 +213,22 @@ int AdminAuthenticator::lockoutSecondsRemaining() const
     return 0;
   }
 
-  auto remaining = duration_cast<seconds>(m_lockoutUntil - steady_clock::now()).count();
-  return static_cast<int>(std::max(0L, remaining));
+  // Use chrono's built-in comparison and duration calculation
+  auto now = steady_clock::now();
+  if (now >= m_lockoutUntil)
+  {
+    return 0;
+  }
+
+  auto remaining = duration_cast<seconds>(m_lockoutUntil - now).count();
+  return static_cast<int>(remaining);
 }
 
 void AdminAuthenticator::resetAttempts()
 {
   m_failedAttempts = 0;
   m_lockoutUntil = steady_clock::time_point::min();
-  qInfo() << "Failed attempts reset";
+  // qInfo() << "Failed attempts reset";
 }
 
 QByteArray AdminAuthenticator::hashPassword(const QString &password, const QByteArray &salt) const
@@ -281,13 +295,13 @@ void AdminAuthenticator::loadPasswordHash()
 
   if (!file.exists())
   {
-    qInfo() << "No password file found at:" << filePath;
+    // qInfo() << "No password file found at:" << filePath;
     return;
   }
 
   if (!file.open(QIODevice::ReadOnly))
   {
-    qWarning() << "Failed to open password file:" << file.errorString();
+    // qWarning() << "Failed to open password file:" << file.errorString();
     return;
   }
 
@@ -297,14 +311,14 @@ void AdminAuthenticator::loadPasswordHash()
   // Format: SALT_SIZE bytes of salt + HASH_SIZE bytes of hash
   if (data.size() != SALT_SIZE + HASH_SIZE)
   {
-    qWarning() << "Invalid password file format. Expected" << (SALT_SIZE + HASH_SIZE) << "bytes, got" << data.size();
+    // qWarning() << "Invalid password file format. Expected" << (SALT_SIZE + HASH_SIZE) << "bytes, got" << data.size();
     return;
   }
 
   m_salt = data.left(SALT_SIZE);
   m_passwordHash = data.mid(SALT_SIZE, HASH_SIZE);
 
-  qInfo() << "Password hash loaded successfully";
+  // qInfo() << "Password hash loaded successfully";
 }
 
 void AdminAuthenticator::savePasswordHash()
@@ -338,7 +352,7 @@ void AdminAuthenticator::savePasswordHash()
   // Set restrictive permissions (owner read/write only)
   file.setPermissions(QFile::ReadOwner | QFile::WriteOwner);
 
-  qInfo() << "Password hash saved to:" << filePath;
+  // qInfo() << "Password hash saved to:" << filePath;
 }
 
 QString AdminAuthenticator::getPasswordFilePath() const

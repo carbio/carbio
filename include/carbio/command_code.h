@@ -81,56 +81,59 @@ enum class command_code : std::uint8_t
  */
 [[nodiscard]] inline constexpr std::string_view get_name(command_code code)
 {
+  using namespace std::literals;
   switch (code)
   {
     case command_code::capture_image:
-      return "capture_image";
+      return "capture_image"sv;
     case command_code::extract_features:
-      return "extract_features";
+      return "extract_features"sv;
     case command_code::match_model:
-      return "match_model";
+      return "match_model"sv;
     case command_code::search_model:
-      return "search_model";
+      return "search_model"sv;
     case command_code::create_model:
-      return "create_model";
+      return "create_model"sv;
     case command_code::store_model:
-      return "store_model";
+      return "store_model"sv;
     case command_code::load_model:
-      return "load_model";
+      return "load_model"sv;
     case command_code::upload_model:
-      return "upload_model";
+      return "upload_model"sv;
     case command_code::download_model:
-      return "download_model";
+      return "download_model"sv;
     case command_code::upload_image:
-      return "upload_image";
+      return "upload_image"sv;
     case command_code::download_image:
-      return "download_image";
+      return "download_image"sv;
     case command_code::erase_model:
-      return "erase_model";
+      return "erase_model"sv;
     case command_code::clear_database:
-      return "clear_database";
+      return "clear_database"sv;
     case command_code::write_system_parameter:
-      return "write_system_parameter";
+      return "write_system_parameter"sv;
     case command_code::read_system_parameter:
-      return "read_system_parameter";
+      return "read_system_parameter"sv;
     case command_code::set_device_password:
-      return "set_device_password";
+      return "set_device_password"sv;
     case command_code::verify_device_password:
-      return "verify_device_password";
+      return "verify_device_password"sv;
     case command_code::fast_search_model:
-      return "fast_search_model";
+      return "fast_search_model"sv;
     case command_code::count_model:
-      return "count_model";
+      return "count_model"sv;
     case command_code::read_index_table:
-      return "read_index_table";
+      return "read_index_table"sv;
     case command_code::set_led_config:
-      return "set_led_config";
+      return "set_led_config"sv;
     case command_code::soft_reset_device:
-      return "soft_reset_device";
+      return "soft_reset_device"sv;
     case command_code::turn_led_on:
-      return "turn_led_on";
+      return "turn_led_on"sv;
     case command_code::turn_led_off:
-      return "turn_led_off";
+      return "turn_led_off"sv;
+    default:
+      return "unknown_command"sv;
   }
 }
 
@@ -141,56 +144,59 @@ enum class command_code : std::uint8_t
  */
 [[nodiscard]] inline constexpr std::string_view get_hex(command_code code)
 {
+  using namespace std::literals;
   switch (code)
   {
     case command_code::capture_image:
-      return "0x01";
+      return "0x01"sv;
     case command_code::extract_features:
-      return "0x02";
+      return "0x02"sv;
     case command_code::match_model:
-      return "0x03";
+      return "0x03"sv;
     case command_code::search_model:
-      return "0x04";
+      return "0x04"sv;
     case command_code::create_model:
-      return "0x05";
+      return "0x05"sv;
     case command_code::store_model:
-      return "0x06";
+      return "0x06"sv;
     case command_code::load_model:
-      return "0x07";
+      return "0x07"sv;
     case command_code::upload_model:
-      return "0x08";
+      return "0x08"sv;
     case command_code::download_model:
-      return "0x09";
+      return "0x09"sv;
     case command_code::upload_image:
-      return "0x0A";
+      return "0x0A"sv;
     case command_code::download_image:
-      return "0x0B";
+      return "0x0B"sv;
     case command_code::erase_model:
-      return "0x0C";
+      return "0x0C"sv;
     case command_code::clear_database:
-      return "0x0D";
+      return "0x0D"sv;
     case command_code::write_system_parameter:
-      return "0x0E";
+      return "0x0E"sv;
     case command_code::read_system_parameter:
-      return "0x0F";
+      return "0x0F"sv;
     case command_code::set_device_password:
-      return "0x12";
+      return "0x12"sv;
     case command_code::verify_device_password:
-      return "0x13";
+      return "0x13"sv;
     case command_code::fast_search_model:
-      return "0x1B";
+      return "0x1B"sv;
     case command_code::count_model:
-      return "0x1D";
+      return "0x1D"sv;
     case command_code::read_index_table:
-      return "0x1F";
+      return "0x1F"sv;
     case command_code::set_led_config:
-      return "0x35";
+      return "0x35"sv;
     case command_code::soft_reset_device:
-      return "0x3D";
+      return "0x3D"sv;
     case command_code::turn_led_on:
-      return "0x50";
+      return "0x50"sv;
     case command_code::turn_led_off:
-      return "0x51";
+      return "0x51"sv;
+    default:
+      return "0x00"sv;
   }
 }
 
@@ -201,56 +207,59 @@ enum class command_code : std::uint8_t
  */
 [[nodiscard]] inline constexpr std::string_view get_message(command_code code)
 {
+  using namespace std::literals;
   switch (code)
   {
     case command_code::capture_image:
-      return "capture fingerprint image";
+      return "capture fingerprint image"sv;
     case command_code::extract_features:
-      return "extract fingerprint features";
+      return "extract fingerprint features"sv;
     case command_code::match_model:
-      return "match fingerprint";
+      return "match fingerprint"sv;
     case command_code::search_model:
-      return "search fingerprint";
+      return "search fingerprint"sv;
     case command_code::create_model:
-      return "create template model";
+      return "create template model"sv;
     case command_code::store_model:
-      return "store template model";
+      return "store template model"sv;
     case command_code::load_model:
-      return "load template model";
+      return "load template model"sv;
     case command_code::upload_model:
-      return "upload template model";
+      return "upload template model"sv;
     case command_code::download_model:
-      return "download template model";
+      return "download template model"sv;
     case command_code::upload_image:
-      return "upload image";
+      return "upload image"sv;
     case command_code::download_image:
-      return "download image";
+      return "download image"sv;
     case command_code::erase_model:
-      return "erase template model";
+      return "erase template model"sv;
     case command_code::clear_database:
-      return "erase database contents";
+      return "erase database contents"sv;
     case command_code::write_system_parameter:
-      return "write system parameter";
+      return "write system parameter"sv;
     case command_code::read_system_parameter:
-      return "read system parameter";
+      return "read system parameter"sv;
     case command_code::set_device_password:
-      return "set device password";
+      return "set device password"sv;
     case command_code::verify_device_password:
-      return "verify device password";
+      return "verify device password"sv;
     case command_code::fast_search_model:
-      return "fast search model";
+      return "fast search model"sv;
     case command_code::count_model:
-      return "count template models";
+      return "count template models"sv;
     case command_code::read_index_table:
-      return "read index table";
+      return "read index table"sv;
     case command_code::set_led_config:
-      return "set led setting";
+      return "set led setting"sv;
     case command_code::soft_reset_device:
-      return "soft reset device";
+      return "soft reset device"sv;
     case command_code::turn_led_on:
-      return "turn led on";
+      return "turn led on"sv;
     case command_code::turn_led_off:
-      return "turn led off";
+      return "turn led off"sv;
+    default:
+      return "unknown command"sv;
   }
 }
 

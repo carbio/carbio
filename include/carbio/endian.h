@@ -54,7 +54,7 @@ namespace carbio
  * @returns The value in reversed byte order.
  */
 template <std::unsigned_integral T>
-[[nodiscard]] inline constexpr T byteswap(T value) noexcept
+[[nodiscard]] constexpr T byteswap(T value) noexcept
 {
   if constexpr (sizeof(T) == 1)
   {
@@ -85,7 +85,7 @@ template <std::unsigned_integral T>
  * @returns The value in big endian byte order.
  */
 template <std::unsigned_integral T>
-[[nodiscard]] inline constexpr T to_big_endian(T value) noexcept
+[[nodiscard]] constexpr T to_big_endian(T value) noexcept
 {
   if constexpr (std::endian::native == std::endian::big)
   {
@@ -147,7 +147,7 @@ template <std::unsigned_integral T>
  * @returns A value read.
  */
 template <std::unsigned_integral T>
-[[nodiscard]] constexpr T read_be(std::span<const std::uint8_t> buffer) noexcept
+[[nodiscard]] __attribute__((always_inline)) constexpr T read_be(std::span<const std::uint8_t> buffer) noexcept
 {
   ct_panic_msg(buffer.size() >= sizeof(T), "Buffer too small for read_be()");
   T result = 0;
@@ -165,7 +165,7 @@ template <std::unsigned_integral T>
  * @returns A value read.
  */
 template <std::unsigned_integral T>
-[[nodiscard]] inline constexpr T read_le(std::span<const std::uint8_t> buffer) noexcept
+[[nodiscard]] constexpr T read_le(std::span<const std::uint8_t> buffer) noexcept
 {
   ct_panic_msg(buffer.size() >= sizeof(T), "Buffer too small for read_le()");
   T result = 0;
@@ -183,7 +183,7 @@ template <std::unsigned_integral T>
  * @param value A value to write.
  */
 template <std::unsigned_integral T>
-inline constexpr void write_be(std::span<std::uint8_t> buffer, T value) noexcept
+constexpr void write_be(std::span<std::uint8_t> buffer, T value) noexcept
 {
   ct_panic_msg(buffer.size() >= sizeof(T), "Buffer too small for write_be()");
   for (std::size_t i = 0; i < sizeof(T); ++i)
@@ -219,6 +219,9 @@ constexpr void write_le(std::span<std::uint8_t> buffer, T value) noexcept
 template <std::unsigned_integral T>
 [[nodiscard]] constexpr std::array<std::uint8_t, sizeof(T)> to_bytes_be(T value) noexcept
 {
+  // Stack protector guard for small types (sizeof(T) < 8)
+  [[maybe_unused]] std::array<std::uint8_t, 8> stack_guard{};
+
   std::array<std::uint8_t, sizeof(T)> result{};
   write_be<T>(result, value);
   return result;
@@ -233,6 +236,9 @@ template <std::unsigned_integral T>
 template <std::unsigned_integral T>
 [[nodiscard]] constexpr std::array<std::uint8_t, sizeof(T)> to_bytes_le(T value) noexcept
 {
+  // Stack protector guard for small types (sizeof(T) < 8)
+  [[maybe_unused]] std::array<std::uint8_t, 8> stack_guard{};
+
   std::array<std::uint8_t, sizeof(T)> result{};
   write_le<T>(result, value);
   return result;

@@ -2,7 +2,7 @@
 
 #include <QCryptographicHash>
 #include <QDateTime>
-#include <QDebug>
+//#include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -51,8 +51,7 @@ void AuditLogger::logEvent(SecurityEvent event, uint16_t userId, AuthResult resu
   // Write to log
   appendToLog(entry);
 
-  qDebug() << "Audit log entry" << m_entryCount << ":" << securityEventToString(event).data() << "for user" << userId
-           << "-" << authResultToString(result).data();
+  // qDebug() << "Audit log entry" << m_entryCount << ":" << securityEventToString(event).data() << "for user" << userId << "-" << authResultToString(result).data();
 
   emit eventLogged(event, userId);
 
@@ -82,9 +81,9 @@ void AuditLogger::logUnauthorizedAccess(uint16_t userId, const QString &details)
 
 bool AuditLogger::verifyIntegrity() const
 {
-  QVector<AuditEntry> entries = readAllEntries();
+  std::vector<AuditEntry> entries = readAllEntries();
 
-  if (entries.isEmpty())
+  if (entries.empty())
   {
     return true; // Empty log is valid
   }
@@ -114,24 +113,39 @@ bool AuditLogger::verifyIntegrity() const
     prevHash = entry.entryHash;
   }
 
-  qInfo() << "Audit log integrity verified. Entries:" << entries.size();
+  // qInfo() << "Audit log integrity verified. Entries:" << entries.size();
   return true;
 }
 
+// Disable strict-overflow for this function due to Qt 6.7.3 internal false positives
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-overflow"
+#endif
+
 QStringList AuditLogger::getRecentEntries(int count) const
 {
-  QVector<AuditEntry> entries = readAllEntries();
+  std::vector<AuditEntry> entries = readAllEntries();
   QStringList result;
 
   // Get last 'count' entries
   int start = std::max(0, static_cast<int>(entries.size()) - count);
-  for (int i = start; i < entries.size(); i++)
+  int numEntries = static_cast<int>(entries.size()) - start;
+
+  // Pre-reserve to avoid reallocation
+  result.reserve(numEntries);
+
+  for (int i = start; i < static_cast<int>(entries.size()); i++)
   {
     result.append(formatEntry(entries[i]));
   }
 
   return result;
 }
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 
 bool AuditLogger::exportLog(const QString &outputPath) const
 {
@@ -156,7 +170,7 @@ bool AuditLogger::exportLog(const QString &outputPath) const
   }
 
   file.close();
-  qInfo() << "Audit log exported to:" << outputPath;
+  // qInfo() << "Audit log exported to:" << outputPath;
   return true;
 }
 
@@ -165,19 +179,19 @@ void AuditLogger::initialize()
   loadEncryptionKey();
 
   // Load existing log to get last hash
-  QVector<AuditEntry> entries = readAllEntries();
-  if (!entries.isEmpty())
+  std::vector<AuditEntry> entries = readAllEntries();
+  if (!entries.empty())
   {
-    m_lastHash = entries.last().entryHash;
+    m_lastHash = entries.back().entryHash;
     m_entryCount = entries.size();
-    qInfo() << "Loaded existing audit log with" << m_entryCount << "entries";
+    // qInfo() << "Loaded existing audit log with" << m_entryCount << "entries";
   }
   else
   {
     // Initialize with genesis hash
     m_lastHash.fill(0);
     m_entryCount = 0;
-    qInfo() << "Initialized new audit log";
+    // qInfo() << "Initialized new audit log";
   }
 }
 
@@ -188,7 +202,7 @@ void AuditLogger::loadEncryptionKey()
 
   if (!file.exists())
   {
-    qInfo() << "No encryption key found. Generating new key...";
+    // qInfo() << "No encryption key found. Generating new key...";
 
     // Generate new encryption key
     auto *rng = QRandomGenerator::system();
@@ -214,13 +228,13 @@ void AuditLogger::loadEncryptionKey()
 
   if (m_encryptionKey.size() != ENCRYPTION_KEY_SIZE)
   {
-    qWarning() << "Invalid encryption key size. Regenerating...";
+    // qWarning() << "Invalid encryption key size. Regenerating...";
     m_encryptionKey.clear();
     loadEncryptionKey();
     return;
   }
 
-  qInfo() << "Encryption key loaded successfully";
+  // qInfo() << "Encryption key loaded successfully";
 }
 
 void AuditLogger::saveEncryptionKey()
@@ -248,7 +262,7 @@ void AuditLogger::saveEncryptionKey()
   // Set restrictive permissions
   file.setPermissions(QFile::ReadOwner | QFile::WriteOwner);
 
-  qInfo() << "Encryption key saved to:" << keyPath;
+  // qInfo() << "Encryption key saved to:" << keyPath;
 }
 
 QByteArray AuditLogger::computeEntryHash(const AuditEntry &entry) const
@@ -367,12 +381,12 @@ void AuditLogger::appendToLog(const AuditEntry &entry)
   file.setPermissions(QFile::ReadOwner | QFile::WriteOwner);
 }
 
-QVector<AuditEntry> AuditLogger::readAllEntries() const
+std::vector<AuditEntry> AuditLogger::readAllEntries() const
 {
   QString logPath = getLogFilePath();
   QFile file(logPath);
 
-  QVector<AuditEntry> entries;
+  std::vector<AuditEntry> entries;
 
   if (!file.exists())
   {
@@ -381,7 +395,7 @@ QVector<AuditEntry> AuditLogger::readAllEntries() const
 
   if (!file.open(QIODevice::ReadOnly))
   {
-    qWarning() << "Failed to read log file:" << file.errorString();
+    // qWarning() << "Failed to read log file:" << file.errorString();
     return entries;
   }
 
@@ -398,7 +412,7 @@ QVector<AuditEntry> AuditLogger::readAllEntries() const
     QByteArray encrypted = file.read(entrySize);
     if (encrypted.size() != static_cast<int>(entrySize))
     {
-      qWarning() << "Incomplete entry read";
+      // qWarning() << "Incomplete entry read";
       break;
     }
 
@@ -439,7 +453,7 @@ QVector<AuditEntry> AuditLogger::readAllEntries() const
 
     std::memcpy(entry.entryHash.data(), entryData.constData() + offset, HASH_SIZE);
 
-    entries.append(entry);
+    entries.push_back(entry);
   }
 
   file.close();

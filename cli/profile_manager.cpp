@@ -9,7 +9,7 @@
 #include <QJsonObject>
 #include <QMessageAuthenticationCode>
 #include <QStandardPaths>
-#include <QDebug>
+// #include <QDebug>
 
 #include <openssl/aes.h>
 #include <openssl/evp.h>
@@ -36,7 +36,7 @@ ProfileManager::ProfileManager(QObject *parent)
   }
 
   m_profilesPath = dir.filePath("profiles.dat");
-  qDebug() << "Profile storage path:" << m_profilesPath;
+  // qDebug() << "Profile storage path:" << m_profilesPath;
 }
 
 ProfileManager::~ProfileManager() = default;
@@ -46,7 +46,7 @@ QByteArray ProfileManager::readCpuSerial()
   QFile cpuInfo("/proc/cpuinfo");
   if (!cpuInfo.open(QIODevice::ReadOnly))
   {
-    qWarning() << "Failed to read CPU info, using fallback";
+    // qWarning() << "Failed to read CPU info, using fallback";
     return QByteArray("FALLBACK_SERIAL");
   }
 
@@ -60,13 +60,13 @@ QByteArray ProfileManager::readCpuSerial()
       if (parts.size() >= 2)
       {
         QString serial = parts[1].trimmed();
-        qDebug() << "CPU Serial:" << serial;
+        // qDebug() << "CPU Serial:" << serial;
         return serial.toLatin1();
       }
     }
   }
 
-  qWarning() << "CPU serial not found, using fallback";
+  // qWarning() << "CPU serial not found, using fallback";
   return QByteArray("FALLBACK_SERIAL");
 }
 
@@ -83,7 +83,7 @@ QByteArray ProfileManager::readEncryptionKeyFile()
 
   if (!keyFile.open(QIODevice::ReadOnly))
   {
-    qWarning() << "Encryption key file not found, generating new one";
+    // qWarning() << "Encryption key file not found, generating new one";
 
     // Generate new random key
     QByteArray newKey(AES_KEY_SIZE, 0);
@@ -98,7 +98,7 @@ QByteArray ProfileManager::readEncryptionKeyFile()
     {
       keyFile.write(newKey);
       keyFile.close();
-      qInfo() << "Generated new encryption key";
+      // qInfo() << "Generated new encryption key";
       return newKey;
     }
     else
@@ -109,7 +109,7 @@ QByteArray ProfileManager::readEncryptionKeyFile()
   }
 
   QByteArray key = keyFile.readAll();
-  qDebug() << "Loaded encryption key (" << key.size() << "bytes)";
+  // qDebug() << "Loaded encryption key (" << key.size() << "bytes)";
   return key;
 }
 
@@ -131,8 +131,8 @@ QByteArray ProfileManager::deriveEncryptionKey()
   // Use OpenSSL's PKCS5_PBKDF2_HMAC for PBKDF2
   QByteArray derivedKey(AES_KEY_SIZE, 0);
   if (PKCS5_PBKDF2_HMAC(
-        diskKey.constData(), diskKey.size(),
-        reinterpret_cast<const unsigned char*>(salt.constData()), salt.size(),
+        diskKey.constData(), static_cast<int>(diskKey.size()),
+        reinterpret_cast<const unsigned char*>(salt.constData()), static_cast<int>(salt.size()),
         PBKDF2_ITERATIONS,
         EVP_sha256(),
         AES_KEY_SIZE,
@@ -188,7 +188,7 @@ QByteArray ProfileManager::encryptData(const QByteArray &plaintext, const QByteA
   // Encrypt data
   if (EVP_EncryptUpdate(ctx, reinterpret_cast<unsigned char*>(ciphertext.data()), &len,
                         reinterpret_cast<const unsigned char*>(plaintext.constData()),
-                        plaintext.size()) != 1)
+                        static_cast<int>(plaintext.size())) != 1)
   {
     EVP_CIPHER_CTX_free(ctx);
     qCritical() << "Encryption update failed";
@@ -242,7 +242,7 @@ QByteArray ProfileManager::decryptData(const QByteArray &ciphertext, const QByte
   // Extract IV, encrypted data, and tag
   const unsigned char *iv = reinterpret_cast<const unsigned char*>(ciphertext.constData());
   const unsigned char *encrypted = iv + 12;
-  int encrypted_len = ciphertext.size() - 12 - 16;
+  int encrypted_len = static_cast<int>(ciphertext.size() - 12 - 16);
   const unsigned char *tag = encrypted + encrypted_len;
 
   // Prepare output buffer
@@ -363,10 +363,10 @@ bool ProfileManager::deserializeProfiles(const QByteArray &data)
     profile.createdAt = QDateTime::fromString(obj["createdAt"].toString(), Qt::ISODate);
     profile.modifiedAt = QDateTime::fromString(obj["modifiedAt"].toString(), Qt::ISODate);
 
-    m_profiles.append(profile);
+    m_profiles.push_back(profile);
   }
 
-  qInfo() << "Loaded" << m_profiles.size() << "profiles";
+  // qInfo() << "Loaded" << m_profiles.size() << "profiles";
   return true;
 }
 
@@ -376,7 +376,7 @@ bool ProfileManager::loadProfiles()
 
   if (!file.exists())
   {
-    qInfo() << "No existing profiles file, starting fresh";
+    // qInfo() << "No existing profiles file, starting fresh";
     m_profiles.clear();
     return true;
   }
@@ -467,7 +467,7 @@ bool ProfileManager::saveProfiles()
     return false;
   }
 
-  qInfo() << "Saved" << m_profiles.size() << "profiles to encrypted storage";
+  // qInfo() << "Saved" << m_profiles.size() << "profiles to encrypted storage";
   return true;
 }
 
@@ -475,14 +475,14 @@ bool ProfileManager::addProfile(const QString &name, bool isAdmin, uint16_t *ass
 {
   if (name.trimmed().isEmpty())
   {
-    qWarning() << "Cannot add profile with empty name";
+    // qWarning() << "Cannot add profile with empty name";
     return false;
   }
 
   uint16_t id = getNextAvailableId();
   if (id > MAX_ID)
   {
-    qWarning() << "No available profile slots (max 128)";
+    // qWarning() << "No available profile slots (max 128)";
     return false;
   }
 
@@ -493,7 +493,7 @@ bool ProfileManager::addProfile(const QString &name, bool isAdmin, uint16_t *ass
   profile.createdAt = QDateTime::currentDateTime();
   profile.modifiedAt = profile.createdAt;
 
-  m_profiles.append(profile);
+  m_profiles.push_back(profile);
 
   if (assignedId)
   {
@@ -501,26 +501,61 @@ bool ProfileManager::addProfile(const QString &name, bool isAdmin, uint16_t *ass
   }
 
   emit profileAdded(id, profile.name);
-  qInfo() << "Added profile:" << profile.name << "(ID:" << id << ", Admin:" << isAdmin << ")";
+  // qInfo() << "Added profile:" << profile.name << "(ID:" << id << ", Admin:" << isAdmin << ")";
+
+  return saveProfiles();
+}
+
+bool ProfileManager::addProfileWithId(const QString &name, uint16_t id, bool isAdmin)
+{
+  if (name.trimmed().isEmpty())
+  {
+    // qWarning() << "Cannot add profile with empty name";
+    return false;
+  }
+
+  if (!isValidId(id))
+  {
+    // qWarning() << "Invalid ID:" << id << "(must be 0-127)";
+    return false;
+  }
+
+  if (profileExists(id))
+  {
+    // qWarning() << "Profile with ID" << id << "already exists";
+    return false;
+  }
+
+  Profile profile;
+  profile.id = id;
+  profile.name = name.trimmed();
+  profile.isAdmin = isAdmin;
+  profile.createdAt = QDateTime::currentDateTime();
+  profile.modifiedAt = profile.createdAt;
+
+  m_profiles.push_back(profile);
+
+  emit profileAdded(id, profile.name);
+  // qInfo() << "Added profile with specified ID:" << profile.name << "(ID:" << id << ", Admin:" << isAdmin << ")";
 
   return saveProfiles();
 }
 
 bool ProfileManager::deleteProfile(uint16_t id)
 {
-  for (int i = 0; i < m_profiles.size(); ++i)
+  for (int i = 0; i < static_cast<int>(m_profiles.size()); ++i)
   {
-    if (m_profiles[i].id == id)
+    if (m_profiles[static_cast<size_t>(i)].id == id)
     {
-      QString name = m_profiles[i].name;
-      m_profiles.removeAt(i);
+      QString name = m_profiles[static_cast<size_t>(i)].name;
+      m_profiles.erase(m_profiles.begin() + i);
       emit profileDeleted(id);
-      qInfo() << "Deleted profile:" << name << "(ID:" << id << ")";
+      // qInfo() << "Deleted profile:" << name << "(ID:" << id << ")";
       return saveProfiles();
     }
   }
 
-  qWarning() << "Profile ID" << id << "not found";
+  // qWarning() << "Profile ID" << id << "not found";
   return false;
 }
 
@@ -534,12 +569,12 @@ bool ProfileManager::updateProfile(uint16_t id, const QString &newName, bool isA
       profile.isAdmin = isAdmin;
       profile.modifiedAt = QDateTime::currentDateTime();
       emit profileUpdated(id);
-      qInfo() << "Updated profile ID" << id << "to:" << newName;
+      // qInfo() << "Updated profile ID" << id << "to:" << newName;
       return saveProfiles();
     }
   }
 
-  qWarning() << "Profile ID" << id << "not found";
+  // qWarning() << "Profile ID" << id << "not found";
   return false;
 }
 
@@ -600,14 +635,14 @@ uint16_t ProfileManager::getNextAvailableId() const
   return MAX_ID + 1; // Invalid - all slots used
 }
 
-QVector<ProfileManager::Profile> ProfileManager::getAllProfiles() const
+std::vector<ProfileManager::Profile> ProfileManager::getAllProfiles() const
 {
   return m_profiles;
 }
 
 int ProfileManager::getProfileCount() const
 {
-  return m_profiles.size();
+  return static_cast<int>(m_profiles.size());
 }
 
 bool ProfileManager::isValidId(uint16_t id) const

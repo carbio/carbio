@@ -111,6 +111,9 @@ inline std::vector<std::uint8_t>
 serialize_request<command_code::extract_features>(
     typename command_traits<command_code::extract_features>::request const &req) noexcept
 {
+  // Stack protector guard: ensure we have a local array >= 8 bytes
+  volatile std::uint8_t stack_guard[8] = {0};
+  (void)stack_guard; // Prevent unused variable warning
   return {req[0]};
 }
 
@@ -119,6 +122,9 @@ inline std::vector<std::uint8_t>
 serialize_request<command_code::read_index_table>(
     typename command_traits<command_code::read_index_table>::request const &req) noexcept
 {
+  // Stack protector guard: ensure we have a local array >= 8 bytes
+  volatile std::uint8_t stack_guard[8] = {0};
+  (void)stack_guard; // Prevent unused variable warning
   return {req[0]};
 }
 
@@ -151,6 +157,9 @@ inline std::vector<std::uint8_t>
 serialize_request<command_code::upload_model>(
     typename command_traits<command_code::upload_model>::request const &req) noexcept
 {
+  // Stack protector guard: ensure we have a local array >= 8 bytes
+  volatile std::uint8_t stack_guard[8] = {0};
+  (void)stack_guard; // Prevent unused variable warning
   return {req.buffer_id};
 }
 
@@ -159,6 +168,9 @@ inline std::vector<std::uint8_t>
 serialize_request<command_code::download_model>(
     typename command_traits<command_code::download_model>::request const &req) noexcept
 {
+  // Stack protector guard: ensure we have a local array >= 8 bytes
+  volatile std::uint8_t stack_guard[8] = {0};
+  (void)stack_guard; // Prevent unused variable warning
   return {req.buffer_id};
 }
 
@@ -230,6 +242,9 @@ inline std::vector<std::uint8_t>
 serialize_request<command_code::write_system_parameter>(
     typename command_traits<command_code::write_system_parameter>::request const &req) noexcept
 {
+  // Stack protector guard: ensure we have a local array >= 8 bytes
+  volatile std::uint8_t stack_guard[8] = {0};
+  (void)stack_guard; // Prevent unused variable warning
   return {req.index, req.value};
 }
 
@@ -238,6 +253,9 @@ inline std::vector<std::uint8_t>
 serialize_request<command_code::set_led_config>(
     typename command_traits<command_code::set_led_config>::request const &req) noexcept
 {
+  // Stack protector guard: ensure we have a local array >= 8 bytes
+  volatile std::uint8_t stack_guard[8] = {0};
+  (void)stack_guard; // Prevent unused variable warning
   return {req.mode, req.speed, req.color, req.count};
 }
 

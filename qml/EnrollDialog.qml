@@ -1,6 +1,8 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "components"
+import "components/composites"
 
 Dialog {
     id: enrollDialog
@@ -16,8 +18,8 @@ Dialog {
     }
     
     contentItem: Rectangle {
-        implicitWidth: 500
-        implicitHeight: 400
+        implicitWidth: 550
+        implicitHeight: 650
         color: "transparent"
         
         ColumnLayout {
@@ -41,12 +43,39 @@ Dialog {
             }
             
             Label {
-                text: "Enter ID # from 1-127:"
+                text: "Driver Name:"
                 font.pixelSize: 18
                 font.family: "Inter"
                 color: "#FFFFFF"
             }
-            
+
+            TextField {
+                id: nameInput
+                Layout.fillWidth: true
+                Layout.preferredHeight: 50
+                font.pixelSize: 20
+                font.family: "Inter"
+                color: "#FFFFFF"
+                placeholderText: "Enter driver name (e.g., Sarah, Peter)"
+
+                background: Rectangle {
+                    color: "#1E1E1E"
+                    radius: 8
+                    border.color: nameInput.activeFocus ? "#01E4E0" : "#444444"
+                    border.width: 2
+
+                    Behavior on border.color { ColorAnimation { duration: 200 } }
+                }
+            }
+
+            Label {
+                text: "Fingerprint ID (1-127):"
+                font.pixelSize: 18
+                font.family: "Inter"
+                color: "#FFFFFF"
+                Layout.topMargin: 10
+            }
+
             TextField {
                 id: idInput
                 Layout.fillWidth: true
@@ -57,24 +86,84 @@ Dialog {
                 color: "#FFFFFF"
                 placeholderText: "ID"
                 validator: IntValidator { bottom: 1; top: 127 }
-                
+
                 background: Rectangle {
                     color: "#1E1E1E"
                     radius: 8
                     border.color: idInput.activeFocus ? "#01E4E0" : "#444444"
                     border.width: 2
-                    
+
                     Behavior on border.color { ColorAnimation { duration: 200 } }
                 }
-                
+
                 Keys.onReturnPressed: startEnroll()
                 Keys.onEnterPressed: startEnroll()
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 50
+                color: "transparent"
+
+                RowLayout {
+                    anchors.fill: parent
+                    spacing: 15
+
+                    Rectangle {
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: 30
+                        radius: 6
+                        color: adminCheckbox.checked ? "#01E4E0" : "#1E1E1E"
+                        border.color: adminCheckbox.checked ? "#00FFEE" : "#444444"
+                        border.width: 2
+
+                        Behavior on color { ColorAnimation { duration: 200 } }
+
+                        Canvas {
+                            id: checkmark
+                            anchors.fill: parent
+                            visible: adminCheckbox.checked
+                            onPaint: {
+                                var ctx = getContext("2d")
+                                ctx.strokeStyle = "#1E1E1E"
+                                ctx.lineWidth = 3
+                                ctx.lineCap = "round"
+                                ctx.lineJoin = "round"
+
+                                ctx.beginPath()
+                                ctx.moveTo(8, 15)
+                                ctx.lineTo(12, 19)
+                                ctx.lineTo(22, 9)
+                                ctx.stroke()
+                            }
+                        }
+
+                        MouseArea {
+                            id: adminCheckbox
+                            anchors.fill: parent
+                            property bool checked: false
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                checked = !checked
+                                checkmark.requestPaint()
+                            }
+                        }
+                    }
+
+                    Label {
+                        text: "Admin Privileges (IDs 0-2 recommended)"
+                        font.pixelSize: 16
+                        font.family: "Inter"
+                        color: "#FFFFFF"
+                        Layout.fillWidth: true
+                    }
+                }
             }
             
             // Progress indicator (shown when processing)
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 120
+                Layout.preferredHeight: 350
                 color: "#1E1E1E"
                 radius: 8
                 border.color: controller.isProcessing ? "#01E4E0" : "#444444"
@@ -85,11 +174,28 @@ Dialog {
 
                 ColumnLayout {
                     anchors.fill: parent
-                    anchors.margins: 15
-                    spacing: 10
+                    anchors.margins: 20
+                    spacing: 15
+
+                    FingerprintScanner {
+                        id: fingerprintScanner
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.preferredWidth: 200
+                        Layout.preferredHeight: 250
+                        failedAttempts: 0
+                        isScanning: controller.isProcessing
+                        scanProgress: controller.scanProgress
+                    }
 
                     Label {
-                        text: controller.operationProgress
+                        text: {
+                            if (controller.scanProgress === 0) return "Place finger on sensor..."
+                            else if (controller.scanProgress < 25) return "Capturing first scan..."
+                            else if (controller.scanProgress < 50) return "Remove finger now"
+                            else if (controller.scanProgress < 75) return "Place same finger again..."
+                            else if (controller.scanProgress < 100) return "Creating template..."
+                            else return "Enrollment complete!"
+                        }
                         font.pixelSize: 16
                         font.family: "Inter"
                         font.bold: Font.DemiBold
@@ -100,45 +206,16 @@ Dialog {
                         horizontalAlignment: Text.AlignHCenter
                     }
 
-                    // Animated progress indicator
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 4
-                        color: "#2A2A2A"
-                        radius: 2
-
-                        Rectangle {
-                            id: progressBar
-                            height: parent.height
-                            width: parent.width * 0.3
-                            color: "#01E4E0"
-                            radius: 2
-
-                            SequentialAnimation on x {
-                                running: controller.isProcessing
-                                loops: Animation.Infinite
-                                NumberAnimation {
-                                    from: 0
-                                    to: enrollDialog.width * 0.7
-                                    duration: 1500
-                                    easing.type: Easing.InOutQuad
-                                }
-                                NumberAnimation {
-                                    from: enrollDialog.width * 0.7
-                                    to: 0
-                                    duration: 1500
-                                    easing.type: Easing.InOutQuad
-                                }
-                            }
-                        }
-                    }
-
                     Label {
-                        text: "Please wait..."
-                        font.pixelSize: 12
-                        font.family: "Inter"
-                        color: "#AAAAAA"
+                        text: controller.scanProgress > 0 ? controller.scanProgress + "%" : ""
+                        font.pixelSize: 24
+                        font.family: "Courier New"
+                        font.bold: Font.Bold
+                        color: "#01E4E0"
                         Layout.alignment: Qt.AlignHCenter
+                        opacity: controller.scanProgress > 0 ? 1.0 : 0.0
+
+                        Behavior on opacity { NumberAnimation { duration: 200 } }
                     }
                 }
             }
@@ -197,7 +274,9 @@ Dialog {
                     }
 
                     onClicked: {
+                        nameInput.text = ""
                         idInput.text = ""
+                        adminCheckbox.checked = false
                         enrollDialog.close()
                     }
                 }
@@ -206,7 +285,11 @@ Dialog {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 50
                     text: "Start Enroll"
-                    enabled: !controller.isProcessing && idInput.text.length > 0 && parseInt(idInput.text) >= 1 && parseInt(idInput.text) <= 127
+                    enabled: !controller.isProcessing &&
+                             nameInput.text.trim().length > 0 &&
+                             idInput.text.length > 0 &&
+                             parseInt(idInput.text) >= 1 &&
+                             parseInt(idInput.text) <= 127
                     
                     contentItem: Label {
                         text: parent.text
@@ -243,7 +326,9 @@ Dialog {
         function onOperationComplete(message) {
             // Close dialog on successful enrollment
             if (enrollDialog.visible && message.includes("enrolled successfully")) {
+                nameInput.text = ""
                 idInput.text = ""
+                adminCheckbox.checked = false
                 enrollDialog.close()
             }
         }
@@ -253,17 +338,21 @@ Dialog {
     }
 
     function startEnroll() {
-        if (idInput.text.length > 0) {
-            var id = parseInt(idInput.text)
-            if (id >= 1 && id <= 127) {
-                console.log("Starting enrollment for ID:", id)
-                controller.enrollFingerprint(id)
-                // Don't close dialog - let it stay open to show progress
-            }
+        var name = nameInput.text.trim()
+        var id = parseInt(idInput.text)
+        var isAdmin = adminCheckbox.checked
+
+        if (name.length > 0 && id >= 1 && id <= 127) {
+            console.log("Enrolling driver:", name, "ID:", id, "Admin:", isAdmin)
+            controller.enrollDriverWithFingerprint(name, id, isAdmin)
+            // Dialog stays open to show progress
         }
     }
-    
+
     onOpened: {
-        idInput.forceActiveFocus()
+        nameInput.forceActiveFocus()
+        nameInput.text = ""
+        idInput.text = ""
+        adminCheckbox.checked = false
     }
 }

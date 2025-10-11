@@ -11,6 +11,8 @@ qt_add_executable(carbiod
   radialbar.h
   controller.h
   controller.cpp
+  sensor_worker.h
+  sensor_worker.cpp
   admin_authenticator.h
   admin_authenticator.cpp
   session_manager.h

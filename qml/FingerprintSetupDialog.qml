@@ -250,13 +250,13 @@ Rectangle {
                     MenuButton {
                         text: "Find Print"
                         description: "Scan and find fingerprint details"
-                        onClicked: controller.findFingerprint()
+                        onClicked: findDialog.open()
                     }
 
                     MenuButton {
                         text: "Identify Print"
                         description: "Identify without knowing ID"
-                        onClicked: controller.identifyFingerprint()
+                        onClicked: identifyDialog.open()
                     }
 
                     MenuButton {
@@ -325,6 +325,14 @@ Rectangle {
         // Dialogs
         EnrollDialog {
             id: enrollDialog
+        }
+
+        FindFingerprintDialog {
+            id: findDialog
+        }
+
+        IdentifyFingerprintDialog {
+            id: identifyDialog
         }
 
         VerifyDialog {

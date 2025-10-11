@@ -114,8 +114,6 @@ private:
     Qt::PenCapStyle m_PenStyle;
     DialType m_DialType;
     bool m_ShowText;
-    [[maybe_unused]] alignas(alignof(std::max_align_t)) char _pad;  // Make padding explicit
-    //static_assert(alignof(RadialBar) <= alignof(std::max_align_t), "Class alignment exceeds max_align_t");
 };
 #if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic pop

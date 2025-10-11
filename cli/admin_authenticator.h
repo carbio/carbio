@@ -23,7 +23,7 @@ namespace carbio::security
  * - Nonce generation for challenge-response authentication
  * - Rate limiting to prevent brute-force attacks
  */
-class AdminAuthenticator : public QObject
+class AdminAuthenticator final : public QObject
 {
   Q_OBJECT
 

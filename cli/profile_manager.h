@@ -4,8 +4,8 @@
 #include <QDateTime>
 #include <QObject>
 #include <QString>
-#include <QVector>
 #include <cstdint>
+#include <vector>
 
 namespace carbio::security
 {
@@ -21,7 +21,7 @@ namespace carbio::security
  *
  * This ensures encrypted data is only decryptable on the specific hardware.
  */
-class ProfileManager : public QObject
+class ProfileManager final : public QObject
 {
   Q_OBJECT
 
@@ -33,6 +33,9 @@ public:
     bool isAdmin;         ///< Admin privileges (IDs 0-2 should be admin)
     QDateTime createdAt;  ///< Profile creation timestamp
     QDateTime modifiedAt; ///< Last modification timestamp
+
+    // Mark destructor as noinline to prevent code bloat warnings
+    [[gnu::noinline]] ~Profile() = default;
   };
 
   explicit ProfileManager(QObject *parent = nullptr);
@@ -42,6 +45,7 @@ public:
   bool loadProfiles();
   bool saveProfiles();
   bool addProfile(const QString &name, bool isAdmin, uint16_t *assignedId = nullptr);
+  bool addProfileWithId(const QString &name, uint16_t id, bool isAdmin);
   bool deleteProfile(uint16_t id);
   bool updateProfile(uint16_t id, const QString &newName, bool isAdmin);
 
@@ -50,7 +54,7 @@ public:
   QString getDriverName(uint16_t id) const;
   bool isAdminId(uint16_t id) const;
   uint16_t getNextAvailableId() const;
-  QVector<Profile> getAllProfiles() const;
+  std::vector<Profile> getAllProfiles() const;
   int getProfileCount() const;
 
   // Validation
@@ -81,7 +85,7 @@ private:
   // Security
   void secureClearMemory(QByteArray &data);
 
-  QVector<Profile> m_profiles;
+  std::vector<Profile> m_profiles;
   QString m_profilesPath;
 
   static constexpr uint16_t MIN_ID = 0;

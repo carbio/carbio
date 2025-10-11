@@ -26,6 +26,9 @@ namespace carbio
 class fingerprint_sensor;
 }
 
+class SensorWorker;
+class QThread;
+
 class Controller : public QObject
 {
   Q_OBJECT
@@ -41,6 +44,7 @@ class Controller : public QObject
   Q_PROPERTY(QString operationProgress READ operationProgress NOTIFY operationProgressChanged)
   Q_PROPERTY(bool isAdminMenuAccessible READ isAdminMenuAccessible NOTIFY isAdminMenuAccessibleChanged)
   Q_PROPERTY(QString adminAccessToken READ adminAccessToken NOTIFY adminAccessTokenChanged)
+  Q_PROPERTY(int scanProgress READ scanProgress NOTIFY scanProgressChanged)
 
 public:
   explicit Controller(QObject *parent = nullptr);
@@ -102,10 +106,13 @@ public:
   {
     return m_adminAccessToken;
   }
+  [[nodiscard]] int
+  scanProgress() const
+  {
+    return m_scanProgress;
+  }
 
   Q_INVOKABLE void startAuthentication();
-  Q_INVOKABLE void cancelAuthentication();
-  Q_INVOKABLE void resetLockout();
   Q_INVOKABLE bool initializeSensor();
   Q_INVOKABLE void refreshTemplateCount();
   Q_INVOKABLE void requestAdminAccess();
@@ -115,13 +122,9 @@ public:
   Q_INVOKABLE bool isAdminFingerprint(int fingerprintId) const;
 
   // Profile management
-  Q_INVOKABLE bool addDriver(const QString &name, bool isAdmin);
-  Q_INVOKABLE bool deleteDriver(int id);
-  Q_INVOKABLE QString getDriverName(int id) const;
-  Q_INVOKABLE QVariantList getAllDrivers() const;
+  Q_INVOKABLE void enrollDriverWithFingerprint(const QString &name, int id, bool isAdmin);
 
 public slots:
-  void enrollFingerprint(int id);
   void findFingerprint();
   void identifyFingerprint();
   void verifyFingerprint(int id);
@@ -130,7 +133,6 @@ public slots:
   void clearDatabase();
   void turnLedOn();
   void turnLedOff();
-  void toggleLed();
   void setBaudRate(int baudChoice);
   void setSecurityLevel(int level);
   void setPacketSize(int size);
@@ -167,16 +169,27 @@ signals:
   void isAdminMenuAccessibleChanged();
   void adminAccessTokenChanged();
   void adminAccessRevoked();
+  void scanProgressChanged();
 
 private slots:
   void onLockoutTick();
-  void onAdminFingerprintPoll();
+
+  // Worker response handlers
+  void onAuthenticationSuccess(int fingerId, int confidence, QString driverName);
+  void onAuthenticationFailed();
+  void onAuthenticationNoFinger();
+  void onAdminFingerprintSuccess(int fingerId, int confidence);
+  void onAdminFingerprintFailed(QString reason);
+  void onAdminFingerprintNoFinger();
+  void onEnrollmentComplete(QString message);
+  void onEnrollmentFailed(QString error);
+  void onOperationComplete(QString message);
+  void onOperationFailed(QString error);
 
 private:
   void    setAuthState(AuthState state);
   void    performAuthentication();
   void    handleAuthenticationFailure();
-  void    performAdminFingerprintVerification();
   QString lookupDriverName(uint16_t fingerId);
   void    lockDashboardAfterAdminFailure();
 
@@ -189,17 +202,15 @@ private:
   bool                                        m_isProcessing;
   int                                         m_templateCount;
   QString                                     m_operationProgress;
-  bool                                        m_manualLedControl;
   bool                                        m_isAdminMenuAccessible;
   QString                                     m_adminAccessToken;
+  int                                         m_scanProgress;
 
-  QTimer *m_scanTimer;
-  QTimer *m_lockoutTimer;
-  QTimer *m_adminFingerprintTimer;
+  QTimer *m_lockoutTimer;  // Still on main thread (UI countdown timer)
 
-  // Adaptive polling state
-  int m_consecutiveNoFingerAuth;
-  int m_consecutiveNoFingerAdmin;
+  // Worker thread for sensor operations
+  QThread      *m_sensorThread;
+  SensorWorker *m_sensorWorker;
 
   // Security components
   std::unique_ptr<carbio::security::AdminAuthenticator> m_adminAuth;
@@ -220,24 +231,20 @@ private:
   void setIsProcessing(bool processing);
   void setTemplateCount(int count);
   void setOperationProgress(const QString &progress);
-  void resetSensorState();
   void setAdminMenuAccessible(bool accessible);
   void setAdminAccessToken(const QString &token);
+  void setScanProgress(int progress);
 
-  // Adaptive polling helpers
-  void adjustAuthPollingInterval();
-  void adjustAdminPollingInterval();
-  void resetAuthPollingInterval();
-  void resetAdminPollingInterval();
+  void enableSensorAutoFingerDetection();
+  void disableSensorAutoFingerDetection();
 
   static constexpr int MAX_ATTEMPTS         = 3;
   static constexpr int LOCKOUT_DURATION_SEC = 20;
 
-  // Adaptive polling configuration
-  static constexpr int POLL_INTERVAL_MIN   = 1;  // Minimum interval (ms)
-  static constexpr int POLL_INTERVAL_MAX   = 16; // Maximum interval (ms)
-  static constexpr int POLL_BACKOFF_FACTOR = 2;  // Exponential backoff multiplier
-  static constexpr int POLL_BACKOFF_THRESHOLD = 3; // Start backoff after N misses
+  // Polling intervals for worker thread
+  static constexpr int POLL_INTERVAL_ULTRA  = 1;   // 1ms = 1000 Hz - burst mode after failure
+  static constexpr int POLL_INTERVAL_FAST   = 3;   // 3ms = 333 Hz - active authentication
+  static constexpr int POLL_INTERVAL_NORMAL = 5;   // 5ms = 200 Hz - background monitoring
 };
 #if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic pop

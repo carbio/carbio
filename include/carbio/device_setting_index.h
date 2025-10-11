@@ -62,14 +62,17 @@ enum class device_setting_index : std::uint8_t
  */
 [[nodiscard]] inline constexpr std::string_view get_name(device_setting_index index) noexcept
 {
+  using namespace std::literals;
   switch (index)
   {
     case device_setting_index::baud_rate_setting:
-      return "baud_rate_setting";
+      return "baud_rate_setting"sv;
     case device_setting_index::security_level_setting:
-      return "security_level_setting";
+      return "security_level_setting"sv;
     case device_setting_index::packet_length_setting:
-      return "packet_length_setting";
+      return "packet_length_setting"sv;
+    default:
+      return "unknown_setting"sv;
   }
 };
 
@@ -80,14 +83,17 @@ enum class device_setting_index : std::uint8_t
  */
 [[nodiscard]] inline constexpr std::string_view get_hex(device_setting_index index) noexcept
 {
+  using namespace std::literals;
   switch (index)
   {
     case device_setting_index::baud_rate_setting:
-      return "0x04";
+      return "0x04"sv;
     case device_setting_index::security_level_setting:
-      return "0x05";
+      return "0x05"sv;
     case device_setting_index::packet_length_setting:
-      return "0x06";
+      return "0x06"sv;
+    default:
+      return "0x00"sv;
   }
 };
 
@@ -98,14 +104,17 @@ enum class device_setting_index : std::uint8_t
  */
 [[nodiscard]] inline constexpr std::string_view get_message(device_setting_index index) noexcept
 {
+  using namespace std::literals;
   switch (index)
   {
     case device_setting_index::baud_rate_setting:
-      return "baud rate setting";
+      return "baud rate setting"sv;
     case device_setting_index::security_level_setting:
-      return "security level setting";
+      return "security level setting"sv;
     case device_setting_index::packet_length_setting:
-      return "packet length setting";
+      return "packet length setting"sv;
+    default:
+      return "unknown setting"sv;
   }
 };
 } /* namespace carbio */

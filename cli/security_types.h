@@ -84,6 +84,14 @@ struct AuditEntry
   std::string   details;
   std::array<uint8_t, HASH_SIZE> prevHash;
   std::array<uint8_t, HASH_SIZE> entryHash;
+
+  // Explicitly define copy/move/destructor as noinline (struct too large to inline)
+  [[gnu::noinline]] AuditEntry(const AuditEntry&) = default;
+  AuditEntry& operator=(const AuditEntry&) = default;
+  AuditEntry(AuditEntry&&) noexcept = default;
+  AuditEntry& operator=(AuditEntry&&) noexcept = default;
+  AuditEntry() = default;
+  [[gnu::noinline]] ~AuditEntry() = default;
 };
 
 // Convert enums to strings for logging

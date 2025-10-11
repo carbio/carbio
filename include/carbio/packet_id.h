@@ -61,16 +61,19 @@ enum class packet_id : std::uint8_t
  */
 [[nodiscard]] inline constexpr std::string_view get_name(packet_id type) noexcept
 {
+  using namespace std::literals;
   switch (type)
   {
     case packet_id::command:
-      return "command";
+      return "command"sv;
     case packet_id::data:
-      return "data";
+      return "data"sv;
     case packet_id::acknowledge:
-      return "acknowledge";
+      return "acknowledge"sv;
     case packet_id::end_data:
-      return "end_data";
+      return "end_data"sv;
+    default:
+      return "unknown"sv;
   }
 };
 
@@ -81,16 +84,19 @@ enum class packet_id : std::uint8_t
  */
 [[nodiscard]] inline constexpr std::string_view code(packet_id type) noexcept
 {
+  using namespace std::literals;
   switch (type)
   {
     case packet_id::command:
-      return "0x01";
+      return "0x01"sv;
     case packet_id::data:
-      return "0x02";
+      return "0x02"sv;
     case packet_id::acknowledge:
-      return "0x07";
+      return "0x07"sv;
     case packet_id::end_data:
-      return "0x08";
+      return "0x08"sv;
+    default:
+      return "0x00"sv;
   }
 };
 
@@ -101,16 +107,19 @@ enum class packet_id : std::uint8_t
  */
 [[nodiscard]] inline constexpr std::string_view get_message(packet_id type) noexcept
 {
+  using namespace std::literals;
   switch (type)
   {
     case packet_id::command:
-      return "command message";
+      return "command message"sv;
     case packet_id::data:
-      return "data message";
+      return "data message"sv;
     case packet_id::acknowledge:
-      return "acknowledge message";
+      return "acknowledge message"sv;
     case packet_id::end_data:
-      return "end of data message";
+      return "end of data message"sv;
+    default:
+      return "unknown message"sv;
   }
 };
 } /* namespace carbio */

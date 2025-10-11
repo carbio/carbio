@@ -20,9 +20,11 @@ FILES
   ../include/carbio/floating_point.h
   ../include/carbio/led_color_setting.h
   ../include/carbio/led_mode_setting.h
+  ../include/carbio/locked_buffer.h
   ../include/carbio/match_query_info.h
   ../include/carbio/packet_id.h
   ../include/carbio/packet.h
+  ../include/carbio/profile_store.h
   ../include/carbio/protocol_handler.h
   ../include/carbio/result.h
   ../include/carbio/search_query_info.h
@@ -34,31 +36,17 @@ PRIVATE
   $<$<PLATFORM_ID:Linux>:serial_port_unix.cpp>
   $<$<PLATFORM_ID:Linux>:serial_port_unix.h>
   $<$<PLATFORM_ID:Linux>:descriptor_traits_unix.h>
-  baud_rate_setting.cpp
-  command_code.cpp
-  command_executor.cpp
-  command_traits.cpp
-  data_length_setting.cpp
   descriptor_traits.h
   descriptor.h
-  descriptor.cpp
   device_info.cpp
-  device_setting_index.cpp
   device_setting_info.cpp
-  endian.cpp
   fingerprint_sensor.cpp
-  floating_point.cpp
-  led_color_setting.cpp
-  led_mode_setting.cpp
   match_query_info.cpp
-  packet_id.cpp
   packet.cpp
+  profile_store.cpp
   protocol_handler.cpp
-  result.cpp
   search_query_info.cpp
-  security_level_setting.cpp
   serial_port.cpp
-  status_code.cpp
 )
 
 target_include_directories(carbio
@@ -71,6 +59,10 @@ PRIVATE
 
 find_package(spdlog CONFIG REQUIRED)
 target_link_libraries(carbio spdlog::spdlog_header_only)
+
+# OpenSSL for profile encryption
+find_package(OpenSSL REQUIRED)
+target_link_libraries(carbio OpenSSL::Crypto)
 
 target_compile_features(carbio PUBLIC cxx_std_23)
 

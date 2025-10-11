@@ -465,6 +465,90 @@ serial_port::impl::read_some(std::span<std::uint8_t> buffer) noexcept
   return std::max<std::size_t>(0, bytes_read);
 }
 
+namespace {
+[[gnu::noinline]]
+int wait_for_read(int fd, std::int64_t timeout_us) noexcept
+{
+  fd_set readfds;
+  FD_ZERO(&readfds);
+  FD_SET(fd, &readfds);
+
+  struct timeval tv{};
+  tv.tv_sec  = timeout_us / 1000000;
+  tv.tv_usec = timeout_us % 1000000;
+
+  return ::select(fd + 1, &readfds, nullptr, nullptr, &tv);
+}
+
+[[gnu::noinline]]
+int wait_for_write(int fd, std::int64_t timeout_us) noexcept
+{
+  fd_set writefds;
+  FD_ZERO(&writefds);
+  FD_SET(fd, &writefds);
+
+  struct timeval tv{};
+  tv.tv_sec  = timeout_us / 1000000;
+  tv.tv_usec = timeout_us % 1000000;
+
+  return ::select(fd + 1, nullptr, &writefds, nullptr, &tv);
+}
+
+[[gnu::noinline]]
+std::size_t do_read_exact(int fd, std::span<std::uint8_t> buffer, std::int64_t timeout_us) noexcept
+{
+  std::size_t total_bytes = 0;
+  const auto start_us = std::chrono::duration_cast<std::chrono::microseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+
+  while (total_bytes < buffer.size())
+  {
+    const auto now_us = std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::steady_clock::now().time_since_epoch()).count();
+    const auto elapsed_us = now_us - start_us;
+    if (elapsed_us >= timeout_us) break;
+
+    const auto select_result = wait_for_read(fd, timeout_us - elapsed_us);
+    if (select_result <= 0) break;
+
+    const auto read_bytes = ::read(fd, buffer.data() + total_bytes, buffer.size() - total_bytes);
+    if (0 > read_bytes && errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK) break;
+    if (0 < read_bytes) total_bytes += static_cast<std::size_t>(read_bytes);
+  }
+
+  return total_bytes;
+}
+
+[[gnu::noinline]]
+std::size_t do_write_exact(int fd, std::span<const std::uint8_t> buffer, std::int64_t timeout_us) noexcept
+{
+  std::size_t total_bytes = 0;
+  const auto start_us = std::chrono::duration_cast<std::chrono::microseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+
+  while (total_bytes < buffer.size())
+  {
+    const auto now_us = std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::steady_clock::now().time_since_epoch()).count();
+    const auto elapsed_us = now_us - start_us;
+    if (elapsed_us >= timeout_us) break;
+
+    const auto select_result = wait_for_write(fd, timeout_us - elapsed_us);
+    if (select_result <= 0) break;
+
+    const auto bytes_written = ::write(fd, buffer.data() + total_bytes, buffer.size() - total_bytes);
+    if (bytes_written < 0)
+    {
+      if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK) break;
+      continue;
+    }
+    total_bytes += static_cast<std::size_t>(bytes_written);
+  }
+  
+  return total_bytes;
+}
+} // anonymous namespace
+
 std::size_t
 serial_port::impl::write_exact(std::span<const std::uint8_t> buffer, std::chrono::milliseconds timeout) noexcept
 {
@@ -474,54 +558,9 @@ serial_port::impl::write_exact(std::span<const std::uint8_t> buffer, std::chrono
     return 0;
   }
 
-  std::size_t total_bytes = 0;
-  auto        start_time = std::chrono::steady_clock::now();
+  const auto timeout_us = timeout.count() * 1000;
+  const auto total_bytes = do_write_exact(fd_.native_handle(), buffer, timeout_us);
 
-  while (total_bytes < buffer.size())
-  {
-    auto elapsed_time = std::chrono::steady_clock::now() - start_time;
-    if (elapsed_time >= timeout)
-    {
-      spdlog::warn("write timed out {}/{}", total_bytes, buffer.size());
-      break;
-    }
-
-    fd_set writefds{};
-    FD_ZERO(&writefds);
-    FD_SET(fd_.native_handle(), &writefds);
-
-    struct timeval tv{};
-    auto remain_us = std::chrono::duration_cast<std::chrono::microseconds>(timeout - elapsed_time).count();
-    tv.tv_sec  = remain_us / 1000000;
-    tv.tv_usec = remain_us % 1000000;
-
-    const auto select_result = ::select(fd_.native_handle() + 1, nullptr, &writefds, nullptr, &tv);
-    if (select_result < 0)
-    {
-      spdlog::error("write failed {}", strerror(errno));
-      break;
-    }
-    
-    if (select_result == 0)
-    {
-      spdlog::warn("write timed out {}/{} bytes", total_bytes, buffer.size());
-      break;
-    }
-
-    const auto bytes_written = ::write(fd_.native_handle(), buffer.data() + total_bytes, buffer.size() - total_bytes);
-    if (bytes_written < 0)
-    {
-      if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK)
-      {
-        spdlog::error("write error: {}", strerror(errno));
-        break;
-      }
-      // For EINTR/EAGAIN/EWOULDBLOCK, continue without adding to total_bytes
-      continue;
-    }
-    // Only add positive values
-    total_bytes += static_cast<std::size_t>(bytes_written);
-  }
   if (spdlog::should_log(spdlog::level::trace))
     spdlog::trace("write completed {}/{} bytes", total_bytes, buffer.size());
   return total_bytes;
@@ -535,52 +574,10 @@ serial_port::impl::read_exact(std::span<std::uint8_t> buffer, std::chrono::milli
     spdlog::warn("port not open");
     return 0;
   }
-  std::size_t total_bytes = 0;
-  auto        start_time = std::chrono::steady_clock::now();
 
-  while (total_bytes < buffer.size())
-  {
-    // Calculate remaining timeout
-    auto elapsed_time = std::chrono::steady_clock::now() - start_time;
-    if (elapsed_time >= timeout)
-    {
-      spdlog::warn("read timed out {}/{}", total_bytes, buffer.size());
-      break;
-    }
+  const auto timeout_us = timeout.count() * 1000;
+  const auto total_bytes = do_read_exact(fd_.native_handle(), buffer, timeout_us);
 
-    // Wait for data
-    fd_set readfds{};
-    FD_ZERO(&readfds);
-    FD_SET(fd_.native_handle(), &readfds);
-
-    struct timeval tv{};
-    auto remain_us = std::chrono::duration_cast<std::chrono::microseconds>(timeout - elapsed_time).count();
-    tv.tv_sec  = remain_us / 1000000;
-    tv.tv_usec = remain_us % 1000000;
-
-    const auto select_result = ::select(fd_.native_handle() + 1, &readfds, nullptr, nullptr, &tv);
-    if (select_result < 0)
-    {
-      spdlog::error("select failed during read: {}", strerror(errno));
-      break;
-    }
-    if (select_result == 0)
-    {
-      spdlog::warn("select timed out: {}/{}", total_bytes, buffer.size());
-      break;
-    }
-    
-    const auto read_bytes = ::read(fd_.native_handle(), buffer.data() + total_bytes, buffer.size() - total_bytes);
-    if (0 > read_bytes && errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK)
-    {
-      spdlog::error("read error: {}", strerror(errno));
-      break;
-    }
-    if (0 < read_bytes)
-    {
-      total_bytes += static_cast<std::size_t>(read_bytes);
-    }
-  }
   if (spdlog::should_log(spdlog::level::trace))
     spdlog::trace("read completed {}/{} bytes", total_bytes, buffer.size());
   return total_bytes;

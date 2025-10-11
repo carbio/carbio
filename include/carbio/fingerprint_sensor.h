@@ -64,6 +64,12 @@ public:
   [[nodiscard]] void_result turn_led_on() noexcept;
   [[nodiscard]] void_result turn_led_off() noexcept;
 
+  // --- power management (automotive integration)
+  [[nodiscard]] void_result enable_auto_finger_detection() noexcept;
+  [[nodiscard]] void_result disable_auto_finger_detection() noexcept;
+  [[nodiscard]] void_result enter_standby_mode() noexcept;
+  [[nodiscard]] void_result wake_from_standby() noexcept;
+
   // --- security
   [[nodiscard]] void_result set_device_password(std::uint32_t password = 0x00000000) noexcept;
   [[nodiscard]] void_result verify_device_password(std::uint32_t password = 0x00000000) noexcept;

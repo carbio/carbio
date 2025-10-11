@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <memory>
+#include <vector>
 
 namespace carbio::security
 {
@@ -21,7 +22,7 @@ namespace carbio::security
  * - Tamper detection via hash chain verification
  * - Timestamped with monotonic clock
  */
-class AuditLogger : public QObject
+class AuditLogger final : public QObject
 {
   Q_OBJECT
 
@@ -126,7 +127,7 @@ private:
    * @brief Read all log entries
    * @return List of all audit entries
    */
-  [[nodiscard]] QVector<AuditEntry> readAllEntries() const;
+  [[nodiscard]] std::vector<AuditEntry> readAllEntries() const;
 
   /**
    * @brief Get path to audit log file

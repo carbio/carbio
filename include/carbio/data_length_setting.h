@@ -61,16 +61,19 @@ enum class data_length_setting : std::uint8_t
  */
 [[nodiscard]] inline constexpr std::string_view get_name(data_length_setting setting) noexcept
 {
+  using namespace std::literals;
   switch (setting)
   {
     case data_length_setting::_32:
-      return "32";
+      return "32"sv;
     case data_length_setting::_64:
-      return "64";
+      return "64"sv;
     case data_length_setting::_128:
-      return "128";
+      return "128"sv;
     case data_length_setting::_256:
-      return "256";
+      return "256"sv;
+    default:
+      return "unknown"sv;
   }
 };
 
@@ -81,16 +84,19 @@ enum class data_length_setting : std::uint8_t
  */
 [[nodiscard]] inline constexpr std::string_view get_hex(data_length_setting setting) noexcept
 {
+  using namespace std::literals;
   switch (setting)
   {
     case data_length_setting::_32:
-      return "0x01";
+      return "0x01"sv;
     case data_length_setting::_64:
-      return "0x02";
+      return "0x02"sv;
     case data_length_setting::_128:
-      return "0x03";
+      return "0x03"sv;
     case data_length_setting::_256:
-      return "0x04";
+      return "0x04"sv;
+    default:
+      return "0x00"sv;
   }
 };
 
@@ -101,16 +107,19 @@ enum class data_length_setting : std::uint8_t
  */
 [[nodiscard]] inline constexpr std::string_view get_message(data_length_setting setting) noexcept
 {
+  using namespace std::literals;
   switch (setting)
   {
     case data_length_setting::_32:
-      return "32-byte data length";
+      return "32-byte data length"sv;
     case data_length_setting::_64:
-      return "64-byte data length";
+      return "64-byte data length"sv;
     case data_length_setting::_128:
-      return "128-byte data length";
+      return "128-byte data length"sv;
     case data_length_setting::_256:
-      return "256-byte data length";
+      return "256-byte data length"sv;
+    default:
+      return "unknown data length"sv;
   }
 };
 } // namespace carbio

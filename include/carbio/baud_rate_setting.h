@@ -70,32 +70,35 @@ enum class baud_rate_setting : std::uint8_t
  */
 [[nodiscard]] inline constexpr std::string_view get_name(baud_rate_setting setting) noexcept
 {
+  using namespace std::literals;
   switch (setting)
   {
     case baud_rate_setting::_9600:
-      return "9600";
+      return "9600"sv;
     case baud_rate_setting::_19200:
-      return "19200";
+      return "19200"sv;
     case baud_rate_setting::_28800:
-      return "28800";
+      return "28800"sv;
     case baud_rate_setting::_38400:
-      return "38400";
+      return "38400"sv;
     case baud_rate_setting::_48000:
-      return "48000";
+      return "48000"sv;
     case baud_rate_setting::_57600:
-      return "57600";
+      return "57600"sv;
     case baud_rate_setting::_67200:
-      return "67200";
+      return "67200"sv;
     case baud_rate_setting::_76800:
-      return "76800";
+      return "76800"sv;
     case baud_rate_setting::_86400:
-      return "86400";
+      return "86400"sv;
     case baud_rate_setting::_96000:
-      return "96000";
+      return "96000"sv;
     case baud_rate_setting::_105600:
-      return "105600";
+      return "105600"sv;
     case baud_rate_setting::_115200:
-      return "115200";
+      return "115200"sv;
+    default:
+      return "unknown"sv;
   }
 };
 
@@ -106,32 +109,35 @@ enum class baud_rate_setting : std::uint8_t
  */
 [[nodiscard]] inline constexpr std::string_view get_hex(baud_rate_setting setting) noexcept
 {
+  using namespace std::literals;
   switch (setting)
   {
     case baud_rate_setting::_9600:
-      return "0x01";
+      return "0x01"sv;
     case baud_rate_setting::_19200:
-      return "0x02";
+      return "0x02"sv;
     case baud_rate_setting::_28800:
-      return "0x03";
+      return "0x03"sv;
     case baud_rate_setting::_38400:
-      return "0x04";
+      return "0x04"sv;
     case baud_rate_setting::_48000:
-      return "0x05";
+      return "0x05"sv;
     case baud_rate_setting::_57600:
-      return "0x06";
+      return "0x06"sv;
     case baud_rate_setting::_67200:
-      return "0x07";
+      return "0x07"sv;
     case baud_rate_setting::_76800:
-      return "0x08";
+      return "0x08"sv;
     case baud_rate_setting::_86400:
-      return "0x09";
+      return "0x09"sv;
     case baud_rate_setting::_96000:
-      return "0x0A";
+      return "0x0A"sv;
     case baud_rate_setting::_105600:
-      return "0x0B";
+      return "0x0B"sv;
     case baud_rate_setting::_115200:
-      return "0x0C";
+      return "0x0C"sv;
+    default:
+      return "0x00"sv;
   }
 };
 
@@ -142,32 +148,35 @@ enum class baud_rate_setting : std::uint8_t
  */
 [[nodiscard]] inline constexpr std::string_view get_message(baud_rate_setting setting) noexcept
 {
+  using namespace std::literals;
   switch (setting)
   {
     case baud_rate_setting::_9600:
-      return "9600 bps";
+      return "9600 bps"sv;
     case baud_rate_setting::_19200:
-      return "19200 bps";
+      return "19200 bps"sv;
     case baud_rate_setting::_28800:
-      return "28800 bps";
+      return "28800 bps"sv;
     case baud_rate_setting::_38400:
-      return "38400 bps";
+      return "38400 bps"sv;
     case baud_rate_setting::_48000:
-      return "48000 bps";
+      return "48000 bps"sv;
     case baud_rate_setting::_57600:
-      return "57600 bps";
+      return "57600 bps"sv;
     case baud_rate_setting::_67200:
-      return "67200 bps";
+      return "67200 bps"sv;
     case baud_rate_setting::_76800:
-      return "76800 bps";
+      return "76800 bps"sv;
     case baud_rate_setting::_86400:
-      return "86400 bps";
+      return "86400 bps"sv;
     case baud_rate_setting::_96000:
-      return "96000 bps";
+      return "96000 bps"sv;
     case baud_rate_setting::_105600:
-      return "105600 bps";
+      return "105600 bps"sv;
     case baud_rate_setting::_115200:
-      return "115200 bps";
+      return "115200 bps"sv;
+    default:
+      return "unknown baud rate"sv;
   }
 };
 } // namespace carbio

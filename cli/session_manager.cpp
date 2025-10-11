@@ -1,7 +1,7 @@
 #include "session_manager.h"
 
 #include <QCryptographicHash>
-#include <QDebug>
+// #include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QMessageAuthenticationCode>
@@ -44,7 +44,7 @@ QString SessionManager::generateToken(uint16_t adminId)
 {
   if (adminId > ADMIN_ID_MAX)
   {
-    qWarning() << "Invalid admin ID:" << adminId;
+    // qWarning() << "Invalid admin ID:" << adminId;
     return QString();
   }
 
@@ -80,7 +80,7 @@ QString SessionManager::generateToken(uint16_t adminId)
 
   QString encoded = QString::fromLatin1(payload.toBase64());
 
-  qInfo() << "Session token generated for admin ID:" << adminId;
+  // qInfo() << "Session token generated for admin ID:" << adminId;
   emit tokenGenerated(adminId);
 
   return encoded;
@@ -90,7 +90,7 @@ AuthResult SessionManager::validateToken(const QString &tokenString, uint16_t ad
 {
   if (adminId > ADMIN_ID_MAX)
   {
-    qWarning() << "Invalid admin ID for validation:" << adminId;
+    // qWarning() << "Invalid admin ID for validation:" << adminId;
     return AuthResult::NOT_ADMIN;
   }
 
@@ -101,7 +101,7 @@ AuthResult SessionManager::validateToken(const QString &tokenString, uint16_t ad
   size_t expectedSize = TOKEN_SIZE + HMAC_SIZE + sizeof(uint64_t) + sizeof(uint16_t);
   if (payload.size() != static_cast<int>(expectedSize))
   {
-    qWarning() << "Invalid token size. Expected:" << expectedSize << "Got:" << payload.size();
+    // qWarning() << "Invalid token size. Expected:" << expectedSize << "Got:" << payload.size();
     return AuthResult::TOKEN_INVALID;
   }
 
@@ -117,22 +117,23 @@ AuthResult SessionManager::validateToken(const QString &tokenString, uint16_t ad
   // Verify admin ID matches
   if (tokenAdminId != adminId)
   {
-    qWarning() << "Admin ID mismatch. Token:" << tokenAdminId << "Expected:" << adminId;
+    // qWarning() << "Admin ID mismatch. Token:" << tokenAdminId << "Expected:" << adminId;
     return AuthResult::NOT_ADMIN;
   }
 
   // Verify HMAC signature
   if (!verifyHMAC(tokenBytes, timestamp, adminId, signature))
   {
-    qWarning() << "HMAC verification failed - token may be forged";
+    // qWarning() << "HMAC verification failed - token may be forged";
     return AuthResult::TOKEN_INVALID;
   }
 
-  // Check expiry
-  uint64_t currentTime = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
-  if (currentTime > timestamp + TOKEN_LIFETIME_SECONDS)
+  // Check expiry using time_point comparison
+  auto tokenCreationTime = system_clock::time_point(seconds(timestamp));
+  auto expiryTime = tokenCreationTime + seconds(TOKEN_LIFETIME_SECONDS);
+  if (system_clock::now() > expiryTime)
   {
-    qWarning() << "Token expired. Age:" << (currentTime - timestamp) << "seconds";
+    // qWarning() << "Token expired";
     emit tokenExpired(adminId);
     return AuthResult::TOKEN_EXPIRED;
   }
@@ -140,7 +141,7 @@ AuthResult SessionManager::validateToken(const QString &tokenString, uint16_t ad
   // Check if token exists in active sessions
   if (!m_activeSessions[adminId].has_value())
   {
-    qWarning() << "No active session for admin ID:" << adminId;
+    // qWarning() << "No active session for admin ID:" << adminId;
     return AuthResult::TOKEN_INVALID;
   }
 
@@ -148,21 +149,21 @@ AuthResult SessionManager::validateToken(const QString &tokenString, uint16_t ad
   QByteArray storedTokenBytes(reinterpret_cast<const char *>(m_activeSessions[adminId]->token.data()), TOKEN_SIZE);
   if (!constantTimeCompare(tokenBytes, storedTokenBytes))
   {
-    qWarning() << "Token mismatch - possible replay attack";
+    // qWarning() << "Token mismatch - possible replay attack";
     return AuthResult::TOKEN_INVALID;
   }
 
   // Check if already used (single-use token)
   if (m_activeSessions[adminId]->used)
   {
-    qWarning() << "Token already used - replay attack detected";
+    // qWarning() << "Token already used - replay attack detected";
     return AuthResult::TOKEN_INVALID;
   }
 
   // Mark as used
   m_activeSessions[adminId]->used = true;
 
-  qInfo() << "Token validated successfully for admin ID:" << adminId;
+  // qInfo() << "Token validated successfully for admin ID:" << adminId;
   emit tokenValidated(adminId);
 
   return AuthResult::SUCCESS;
@@ -177,9 +178,10 @@ bool SessionManager::hasValidSession(uint16_t adminId) const
 
   const auto &session = m_activeSessions[adminId].value();
 
-  // Check if expired
-  uint64_t currentTime = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
-  if (currentTime > session.timestamp + TOKEN_LIFETIME_SECONDS)
+  // Check if expired using time_point comparison
+  auto tokenCreationTime = system_clock::time_point(seconds(session.timestamp));
+  auto expiryTime = tokenCreationTime + seconds(TOKEN_LIFETIME_SECONDS);
+  if (system_clock::now() > expiryTime)
   {
     return false;
   }
@@ -195,7 +197,7 @@ bool SessionManager::hasValidSession(uint16_t adminId) const
 
 void SessionManager::revokeAllSessions()
 {
-  qWarning() << "Revoking all active sessions";
+  // qWarning() << "Revoking all active sessions";
 
   for (size_t i = 0; i <= ADMIN_ID_MAX; i++)
   {
@@ -222,7 +224,7 @@ void SessionManager::revokeSession(uint16_t adminId)
     m_activeSessions[adminId]->signature.fill(0);
     m_activeSessions[adminId].reset();
 
-    qInfo() << "Session revoked for admin ID:" << adminId;
+    // qInfo() << "Session revoked for admin ID:" << adminId;
     emit tokenRevoked(adminId);
   }
 }
@@ -235,10 +237,17 @@ int SessionManager::sessionTimeRemaining(uint16_t adminId) const
   }
 
   const auto &session = m_activeSessions[adminId].value();
-  uint64_t currentTime = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
-  int64_t remaining = static_cast<int64_t>(session.timestamp + TOKEN_LIFETIME_SECONDS - currentTime);
+  auto tokenCreationTime = system_clock::time_point(seconds(session.timestamp));
+  auto expiryTime = tokenCreationTime + seconds(TOKEN_LIFETIME_SECONDS);
+  auto now = system_clock::now();
 
-  return static_cast<int>(std::max(0L, remaining));
+  if (now >= expiryTime)
+  {
+    return 0;
+  }
+
+  auto remaining = duration_cast<seconds>(expiryTime - now).count();
+  return static_cast<int>(remaining);
 }
 
 QByteArray SessionManager::generateHMAC(const QByteArray &token, uint64_t timestamp, uint16_t adminId) const
@@ -261,25 +270,30 @@ bool SessionManager::verifyHMAC(const QByteArray &token, uint64_t timestamp, uin
 
 void SessionManager::cleanupExpiredTokens()
 {
-  uint64_t currentTime = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+  auto now = system_clock::now();
 
   for (size_t i = 0; i <= ADMIN_ID_MAX; i++)
   {
     if (m_activeSessions[i].has_value())
     {
       const auto &session = m_activeSessions[i].value();
-      uint64_t expiryTime = session.timestamp + TOKEN_LIFETIME_SECONDS;
+      auto tokenCreationTime = system_clock::time_point(seconds(session.timestamp));
+      auto expiryTime = tokenCreationTime + seconds(TOKEN_LIFETIME_SECONDS);
 
-      if (currentTime > expiryTime)
+      if (now > expiryTime)
       {
-        qInfo() << "Cleaning up expired session for admin ID:" << i;
+        // qInfo() << "Cleaning up expired session for admin ID:" << i;
         m_activeSessions[i].reset();
         emit tokenExpired(static_cast<uint16_t>(i));
       }
-      else if (currentTime > expiryTime - EXPIRY_WARNING_SECONDS)
+      else
       {
-        int remaining = static_cast<int>(expiryTime - currentTime);
-        emit sessionExpiring(static_cast<uint16_t>(i), remaining);
+        auto warningTime = expiryTime - seconds(EXPIRY_WARNING_SECONDS);
+        if (now > warningTime)
+        {
+          int remaining = static_cast<int>(duration_cast<seconds>(expiryTime - now).count());
+          emit sessionExpiring(static_cast<uint16_t>(i), remaining);
+        }
       }
     }
   }
@@ -292,7 +306,7 @@ void SessionManager::loadSecretKey()
 
   if (!file.exists())
   {
-    qInfo() << "No secret key found. Generating new key...";
+    // qInfo() << "No secret key found. Generating new key...";
 
     // Generate new secret key
     auto *rng = QRandomGenerator::system();
@@ -318,13 +332,13 @@ void SessionManager::loadSecretKey()
 
   if (m_secretKey.size() != SECRET_KEY_SIZE)
   {
-    qWarning() << "Invalid secret key size. Generating new key...";
+    // qWarning() << "Invalid secret key size. Generating new key...";
     m_secretKey.clear();
     loadSecretKey(); // Regenerate
     return;
   }
 
-  qInfo() << "Secret key loaded successfully";
+  // qInfo() << "Secret key loaded successfully";
 }
 
 void SessionManager::saveSecretKey()
@@ -356,7 +370,7 @@ void SessionManager::saveSecretKey()
   // Set restrictive permissions (owner read/write only)
   file.setPermissions(QFile::ReadOwner | QFile::WriteOwner);
 
-  qInfo() << "Secret key saved to:" << keyPath;
+  // qInfo() << "Secret key saved to:" << keyPath;
 }
 
 QString SessionManager::getSecretKeyPath() const

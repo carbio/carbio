@@ -1,4 +1,5 @@
 #include "carbio/fingerprint_sensor.h"
+#include "carbio/profile_store.h"
 
 #include <spdlog/spdlog.h>
 
@@ -11,13 +12,13 @@
 using namespace carbio;
 
 // Helper function to get device capacity for searches
-uint16_t getDeviceCapacity(fingerprint_sensor &sensor)
+static uint16_t getDeviceCapacity(fingerprint_sensor &sensor)
 {
   auto params = sensor.get_device_setting_info();
   return params ? params->capacity : 127; // Default to 127 if read fails
 }
 
-bool getFingerprint(fingerprint_sensor &sensor)
+[[maybe_unused]] static bool getFingerprint(fingerprint_sensor &sensor)
 {
   std::cout << "Waiting for image..." << std::endl;
 
@@ -41,7 +42,7 @@ bool getFingerprint(fingerprint_sensor &sensor)
   return result.has_value();
 }
 
-std::optional<search_query_info> getFingerprintDetail(fingerprint_sensor &sensor)
+static std::optional<search_query_info> getFingerprintDetail(fingerprint_sensor &sensor)
 {
   std::cout << "Getting image..." << std::flush;
 
@@ -90,8 +91,9 @@ std::optional<search_query_info> getFingerprintDetail(fingerprint_sensor &sensor
   }
 }
 
-/// @brief Enroll a new fingerprint
-bool enrollFinger(fingerprint_sensor &sensor, uint16_t location)
+/// @brief Enroll a new fingerprint with profile
+static bool enrollFinger(fingerprint_sensor &sensor, profile_store &profiles, uint16_t location,
+                  std::string_view name, bool isAdmin)
 {
   for (int fingerImg = 1; fingerImg <= 2; ++fingerImg)
   {
@@ -171,11 +173,26 @@ bool enrollFinger(fingerprint_sensor &sensor, uint16_t location)
     return false;
   }
 
+  // Save profile to encrypted storage
+  std::cout << "Saving driver profile..." << std::flush;
+  auto profile_result = profiles.add_profile_with_id(name, location, isAdmin);
+  if (profile_result)
+  {
+    std::cout << "Profile saved!" << std::endl;
+    std::cout << "Enrolled: " << name << " (ID: " << location << ", Admin: "
+              << (isAdmin ? "Yes" : "No") << ")" << std::endl;
+  }
+  else
+  {
+    std::cout << "\nWarning: Fingerprint stored but profile save failed: "
+              << get_message(profile_result.error()) << std::endl;
+  }
+
   return true;
 }
 
 /// @brief Get a valid template ID from user (1-127)
-uint16_t getTemplateId()
+static uint16_t getTemplateId()
 {
   int id = 0;
   while (id < 1 || id > 127)
@@ -202,7 +219,7 @@ uint16_t getTemplateId()
 }
 
 /// @brief Identify fingerprint (find without knowing ID)
-bool identifyFingerprint(fingerprint_sensor &sensor)
+static bool identifyFingerprint(fingerprint_sensor &sensor, profile_store &profiles)
 {
   std::cout << "Place finger on sensor..." << std::endl;
 
@@ -233,6 +250,17 @@ bool identifyFingerprint(fingerprint_sensor &sensor)
   if (result)
   {
     std::cout << "Match found! ID: " << result->index << ", Confidence: " << result->confidence << std::endl;
+
+    // Look up driver profile
+    std::string driver_name = profiles.get_driver_name(result->index);
+    std::cout << "Driver: " << driver_name << std::endl;
+
+    // Check if admin
+    if (profiles.is_admin_id(result->index))
+    {
+      std::cout << "Status: ADMIN" << std::endl;
+    }
+
     return true;
   }
   else
@@ -243,7 +271,7 @@ bool identifyFingerprint(fingerprint_sensor &sensor)
 }
 
 /// @brief Verify specific fingerprint by ID
-bool verifyFingerprint(fingerprint_sensor &sensor, uint16_t expectedId)
+static bool verifyFingerprint(fingerprint_sensor &sensor, uint16_t expectedId)
 {
   std::cout << "Place finger on sensor..." << std::endl;
 
@@ -292,7 +320,7 @@ bool verifyFingerprint(fingerprint_sensor &sensor, uint16_t expectedId)
 }
 
 /// @brief Query if a specific template ID exists
-void queryTemplate(fingerprint_sensor &sensor, uint16_t templateId)
+static void queryTemplate(fingerprint_sensor &sensor, uint16_t templateId)
 {
   std::array<std::uint8_t, 32> buffer;
   auto result = sensor.read_index_table(buffer);
@@ -335,7 +363,7 @@ void queryTemplate(fingerprint_sensor &sensor, uint16_t templateId)
 }
 
 /// @brief LED control menu
-void ledControl(fingerprint_sensor &sensor)
+static void ledControl(fingerprint_sensor &sensor)
 {
   std::cout << "\nLED Control:" << std::endl;
   std::cout << "1) Turn LED ON" << std::endl;
@@ -384,7 +412,7 @@ void ledControl(fingerprint_sensor &sensor)
 }
 
 /// @brief System configuration menu
-void configureSystem(fingerprint_sensor &sensor)
+static void configureSystem(fingerprint_sensor &sensor)
 {
   std::cout << "\nSystem Configuration:" << std::endl;
   std::cout << "1) Set baud rate" << std::endl;
@@ -552,7 +580,7 @@ void configureSystem(fingerprint_sensor &sensor)
   }
 }
 
-int main(int argc, char *argv[])
+int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[])
 {
   spdlog::set_pattern("[%H:%M:%S %z] [%n] [%^---%L---%$] [thread %t] %v");
   spdlog::set_level(spdlog::level::warn);
@@ -564,6 +592,19 @@ int main(int argc, char *argv[])
     return 1;
   }
 
+  // Initialize profile storage
+  profile_store profiles;
+  auto load_result = profiles.load_profiles();
+  if (load_result)
+  {
+    std::cout << "Loaded " << profiles.get_profile_count() << " driver profiles" << std::endl;
+  }
+  else
+  {
+    std::cout << "Warning: Failed to load profiles: " << get_message(load_result.error()) << std::endl;
+    std::cout << "Starting with empty profile database" << std::endl;
+  }
+
   // Main menu loop
   while (true)
   {
@@ -571,8 +612,8 @@ int main(int argc, char *argv[])
 
     // Fetch and display templates
     std::array<std::uint8_t, 32> buffer;
-    auto result = sensor.read_index_table(buffer);
-    if (result)
+    auto index_result = sensor.read_index_table(buffer);
+    if (index_result)
     {
       std::cout << "Fingerprint templates: [";
       bool first = true;
@@ -581,7 +622,7 @@ int main(int argc, char *argv[])
       {
         std::uint16_t byte_index = i / 8;
         std::uint8_t bit_index = i % 8;
-        if ((result->at(byte_index) & (1 << bit_index)) != 0)
+        if ((index_result->at(byte_index) & (1 << bit_index)) != 0)
         {
           if (!first) std::cout << ", ";
           std::cout << i;
@@ -614,8 +655,34 @@ int main(int argc, char *argv[])
 
     if (input == "e" || input == "E")
     {
+      // Get driver information
+      std::cout << "Enter driver name: " << std::flush;
+      std::string name;
+      std::getline(std::cin, name);
+
+      if (name.empty())
+      {
+        std::cout << "Driver name cannot be empty" << std::endl;
+        continue;
+      }
+
+      std::cout << "Admin privileges? (y/n): " << std::flush;
+      std::string admin_input;
+      std::getline(std::cin, admin_input);
+      bool isAdmin = (admin_input == "y" || admin_input == "Y");
+
       uint16_t id = getTemplateId();
-      if (enrollFinger(sensor, id))
+
+      // Check if profile already exists
+      if (profiles.profile_exists(id))
+      {
+        std::cout << "Error: Profile with ID " << id << " already exists" << std::endl;
+        std::string existing_name = profiles.get_driver_name(id);
+        std::cout << "Existing driver: " << existing_name << std::endl;
+        continue;
+      }
+
+      if (enrollFinger(sensor, profiles, id, name, isAdmin))
       {
         std::cout << "Enrollment successful!" << std::endl;
       }
@@ -626,10 +693,10 @@ int main(int argc, char *argv[])
     }
     else if (input == "f" || input == "F")
     {
-      auto result = getFingerprintDetail(sensor);
-      if (result)
+      auto find_result = getFingerprintDetail(sensor);
+      if (find_result)
       {
-        std::cout << "Detected #" << result->index << " with confidence " << result->confidence << std::endl;
+        std::cout << "Detected #" << find_result->index << " with confidence " << find_result->confidence << std::endl;
       }
       else
       {
@@ -638,7 +705,7 @@ int main(int argc, char *argv[])
     }
     else if (input == "i" || input == "I")
     {
-      identifyFingerprint(sensor);
+      identifyFingerprint(sensor, profiles);
     }
     else if (input == "v" || input == "V")
     {
@@ -655,16 +722,27 @@ int main(int argc, char *argv[])
       uint16_t id = getTemplateId();
       if (sensor.erase_model(id, 1))
       {
-        std::cout << "Deleted!" << std::endl;
+        std::cout << "Fingerprint deleted from sensor" << std::endl;
+
+        // Also delete the profile
+        auto delete_result = profiles.delete_profile(id);
+        if (delete_result)
+        {
+          std::cout << "Profile deleted" << std::endl;
+        }
+        else
+        {
+          std::cout << "Warning: Profile deletion failed" << std::endl;
+        }
       }
       else
       {
-        std::cout << "Failed to delete" << std::endl;
+        std::cout << "Failed to delete fingerprint" << std::endl;
       }
     }
     else if (input == "c" || input == "C")
     {
-      std::cout << "WARNING: This will clear fingerprints!" << std::endl;
+      std::cout << "WARNING: This will clear all fingerprints and driver profiles!" << std::endl;
       std::cout << "Type 'y' to confirm: " << std::flush;
       std::string confirm;
       std::getline(std::cin, confirm);
@@ -673,7 +751,18 @@ int main(int argc, char *argv[])
         std::cout << "Clearing database..." << std::endl;
         if (sensor.clear_database())
         {
-          std::cout << "All fingerprints deleted!" << std::endl;
+          std::cout << "All fingerprints deleted from sensor!" << std::endl;
+
+          // Also clear all profiles
+          auto clear_result = profiles.clear_all_profiles();
+          if (clear_result)
+          {
+            std::cout << "All driver profiles deleted!" << std::endl;
+          }
+          else
+          {
+            std::cout << "Warning: Profile clear failed" << std::endl;
+          }
         }
         else
         {

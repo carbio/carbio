@@ -11,54 +11,106 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "installDir": "${sourceDir}/install/${presetName}",
-      "toolchainFile": "${sourceDir}/cmake/Toolchains/toolchain-armv8.cmake",
       "hidden": true
     },
-    { "name": "debug", "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }, "inherits": ["base"] },
-    { "name": "release", "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }, "inherits": ["base"] },
-    { "name": "profile", "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" }, "inherits": ["base"] }
+    { "name": "armv8", "toolchainFile": "${sourceDir}/cmake/Toolchains/toolchain-armv8.cmake" },
+    { "name": "armv8-debug", "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }, "inherits": ["base","armv8"] },
+    { "name": "armv8-release", "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }, "inherits": ["base","armv8"] },
+    { "name": "armv8-profile", "cacheVariables": { "CMAKE_BUILD_TYPE": "Profile" }, "inherits": ["base","armv8"] },
+    { "name": "armv8-asan", "cacheVariables": { "CMAKE_BUILD_TYPE": "ASan" }, "inherits": ["base","armv8"] },
+    { "name": "armv8-tsan", "cacheVariables": { "CMAKE_BUILD_TYPE": "TSan" }, "inherits": ["base","armv8"] },
+    { "name": "armv8-ubsan", "cacheVariables": { "CMAKE_BUILD_TYPE": "UBSan" }, "inherits": ["base","armv8"] },
+    { "name": "armv8-rtsan", "cacheVariables": { "CMAKE_BUILD_TYPE": "RTSan" }, "inherits": ["base","armv8"] }
   ],
   "buildPresets": [
-    { "name": "debug", "configurePreset": "debug" },
-    { "name": "release", "configurePreset": "release" },
-    { "name": "profile", "configurePreset": "profile" }
+    { "name": "armv8-debug", "configurePreset": "armv8-debug" },
+    { "name": "armv8-release", "configurePreset": "armv8-release" },
+    { "name": "armv8-profile", "configurePreset": "armv8-profile" },
+    { "name": "armv8-asan", "configurePreset": "armv8-asan" },
+    { "name": "armv8-tsan", "configurePreset": "armv8-tsan" },
+    { "name": "armv8-ubsan", "configurePreset": "armv8-ubsan" },
+    { "name": "armv8-rtsan", "configurePreset": "armv8-rtsan" }
   ],
   "testPresets": [
-    { "name": "debug", "configurePreset": "debug" },
-    { "name": "release", "configurePreset": "release" },
-    { "name": "profile", "configurePreset": "profile" }
+    { "name": "armv8-debug", "configurePreset": "armv8-debug" },
+    { "name": "armv8-release", "configurePreset": "armv8-release" },
+    { "name": "armv8-profile", "configurePreset": "armv8-profile" },
+    { "name": "armv8-asan", "configurePreset": "armv8-asan" },
+    { "name": "armv8-tsan", "configurePreset": "armv8-tsan" },
+    { "name": "armv8-ubsan", "configurePreset": "armv8-ubsan" },
+    { "name": "armv8-rtsan", "configurePreset": "armv8-rtsan" }
   ],
   "packagePresets": [
-    { "name": "debug", "configurePreset": "debug" },
-    { "name": "release", "configurePreset": "release" },
-    { "name": "profile", "configurePreset": "profile" }
+    { "name": "armv8-debug", "configurePreset": "armv8-debug" },
+    { "name": "armv8-release", "configurePreset": "armv8-release" },
+    { "name": "armv8-profile", "configurePreset": "armv8-profile" },
+    { "name": "armv8-asan", "configurePreset": "armv8-asan" },
+    { "name": "armv8-tsan", "configurePreset": "armv8-tsan" },
+    { "name": "armv8-ubsan", "configurePreset": "armv8-ubsan" },
+    { "name": "armv8-rtsan", "configurePreset": "armv8-rtsan" }
   ],
   "workflowPresets": [
     {
-      "name": "debug",
+      "name": "armv8-debug",
       "steps": [
-        { "type": "configure", "name": "debug" },
-        { "type": "build", "name": "debug" },
-        { "type": "test", "name": "debug" },
-        { "type": "package", "name": "debug" }
+        { "type": "configure", "name": "armv8-debug" },
+        { "type": "build", "name": "armv8-debug" },
+        { "type": "test", "name": "armv8-debug" },
+        { "type": "package", "name": "armv8-debug" }
       ]
     },
     {
-      "name": "profile",
+      "name": "armv8-profile",
       "steps": [
-        { "type": "configure", "name": "profile" },
-        { "type": "build", "name": "profile" },
-        { "type": "test", "name": "profile" },
-        { "type": "package", "name": "profile" }
+        { "type": "configure", "name": "armv8-profile" },
+        { "type": "build", "name": "armv8-profile" },
+        { "type": "test", "name": "armv8-profile" },
+        { "type": "package", "name": "armv8-profile" }
       ]
     },
     {
-      "name": "release",
+      "name": "armv8-release",
       "steps": [
-        { "type": "configure", "name": "release" },
-        { "type": "build", "name": "release" },
-        { "type": "test", "name": "release" },
-        { "type": "package", "name": "release" }
+        { "type": "configure", "name": "armv8-release" },
+        { "type": "build", "name": "armv8-release" },
+        { "type": "test", "name": "armv8-release" },
+        { "type": "package", "name": "armv8-release" }
+      ]
+    },
+    {
+      "name": "armv8-asan",
+      "steps": [
+        { "type": "configure", "name": "armv8-asan" },
+        { "type": "build", "name": "armv8-asan" },
+        { "type": "test", "name": "armv8-asan" },
+        { "type": "package", "name": "armv8-asan" }
+      ]
+    },
+    {
+      "name": "armv8-tsan",
+      "steps": [
+        { "type": "configure", "name": "armv8-tsan" },
+        { "type": "build", "name": "armv8-tsan" },
+        { "type": "test", "name": "armv8-tsan" },
+        { "type": "package", "name": "armv8-tsan" }
+      ]
+    },
+    {
+      "name": "armv8-ubsan",
+      "steps": [
+        { "type": "configure", "name": "armv8-ubsan" },
+        { "type": "build", "name": "armv8-ubsan" },
+        { "type": "test", "name": "armv8-ubsan" },
+        { "type": "package", "name": "armv8-ubsan" }
+      ]
+    },
+    {
+      "name": "armv8-rtsan",
+      "steps": [
+        { "type": "configure", "name": "armv8-rtsan" },
+        { "type": "build", "name": "armv8-rtsan" },
+        { "type": "test", "name": "armv8-rtsan" },
+        { "type": "package", "name": "armv8-rtsan" }
       ]
     }
   ]

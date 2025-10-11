@@ -29,8 +29,9 @@ enum class AuthState : uint8_t
     return "ALERT";
   case AuthState::ON:
     return "ON";
+  default:
+    return "UNKNOWN";
   }
-  return "UNKNOWN";
 }
 
 // Authentication result

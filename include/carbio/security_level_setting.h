@@ -63,18 +63,21 @@ enum class security_level_setting : std::uint8_t
  */
 [[nodiscard]] inline constexpr std::string_view get_name(security_level_setting setting) noexcept
 {
+  using namespace std::literals;
   switch (setting)
   {
     case security_level_setting::lowest:
-      return "lowest";
+      return "lowest"sv;
     case security_level_setting::low:
-      return "low";
+      return "low"sv;
     case security_level_setting::balanced:
-      return "balanced";
+      return "balanced"sv;
     case security_level_setting::high:
-      return "high";
+      return "high"sv;
     case security_level_setting::highest:
-      return "highest";
+      return "highest"sv;
+    default:
+      return "unknown"sv;
   }
 };
 
@@ -85,18 +88,21 @@ enum class security_level_setting : std::uint8_t
  */
 [[nodiscard]] inline constexpr std::string_view get_hex(security_level_setting setting) noexcept
 {
+  using namespace std::literals;
   switch (setting)
   {
     case security_level_setting::lowest:
-      return "0x01";
+      return "0x01"sv;
     case security_level_setting::low:
-      return "0x02";
+      return "0x02"sv;
     case security_level_setting::balanced:
-      return "0x03";
+      return "0x03"sv;
     case security_level_setting::high:
-      return "0x04";
+      return "0x04"sv;
     case security_level_setting::highest:
-      return "0x05";
+      return "0x05"sv;
+    default:
+      return "0x00"sv;
   }
 };
 
@@ -107,18 +113,21 @@ enum class security_level_setting : std::uint8_t
  */
 [[nodiscard]] inline constexpr std::string_view get_message(security_level_setting setting) noexcept
 {
+  using namespace std::literals;
   switch (setting)
   {
     case security_level_setting::lowest:
-      return "fastest matching algorithm at the cost of reliability";
+      return "fastest matching algorithm at the cost of reliability"sv;
     case security_level_setting::low:
-      return "slightly faster matching algorithm at the cost of reliability";
+      return "slightly faster matching algorithm at the cost of reliability"sv;
     case security_level_setting::balanced:
-      return "reasonably fast and reliable matching algorithm";
+      return "reasonably fast and reliable matching algorithm"sv;
     case security_level_setting::high:
-      return "slightly more reliable matching algorithm at the cost of speed";
+      return "slightly more reliable matching algorithm at the cost of speed"sv;
     case security_level_setting::highest:
-      return "most reliable matching algorithm at the cost of speed";
+      return "most reliable matching algorithm at the cost of speed"sv;
+    default:
+      return "unknown security level"sv;
   }
 };
 } // namespace carbio

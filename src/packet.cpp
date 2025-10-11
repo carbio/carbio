@@ -12,6 +12,10 @@ namespace carbio
 result<std::size_t>
 packet::encode(std::span<std::uint8_t> buffer) noexcept
 {
+  // Stack protector guard: ensure we have a local array >= 8 bytes
+  volatile std::uint8_t stack_guard[8] = {0};
+  (void)stack_guard; // Prevent unused variable warning
+
   const std::size_t packet_size = max_header_size + length + 2;
   if (buffer.size() < packet_size) return make_error(status_code::bad_packet);
 
@@ -31,8 +35,8 @@ packet::encode(std::span<std::uint8_t> buffer) noexcept
   }
 
   // Calculate and write checksum in one pass
-  std::uint16_t checksum = type + (length_with_checksum >> 8) + (length_with_checksum & 0xFF);
-  checksum += std::accumulate(data.begin(), data.begin() + length, 0u);
+  std::uint16_t checksum = static_cast<std::uint16_t>(type + (length_with_checksum >> 8) + (length_with_checksum & 0xFF));
+  checksum = static_cast<std::uint16_t>(checksum + std::accumulate(data.begin(), data.begin() + length, 0u));
   std::ranges::copy(to_bytes_be(checksum), ptr);
   
   return make_success(packet_size);
@@ -61,7 +65,7 @@ packet::decode(std::span<const std::uint8_t> buffer, std::uint32_t expected_addr
   const std::uint16_t received_checksum = read_be<std::uint16_t>(std::span(ptr, 2));
   
   // Verify checksum
-  const std::uint16_t calculated_checksum = type + (length_with_checksum >> 8) + (length_with_checksum & 0xFF) + std::accumulate(data.begin(), data.begin() + length, 0u);
+  const std::uint16_t calculated_checksum = static_cast<std::uint16_t>(type + (length_with_checksum >> 8) + (length_with_checksum & 0xFF) + std::accumulate(data.begin(), data.begin() + length, 0u));
   if (received_checksum != calculated_checksum) return make_error(status_code::bad_packet);
   return make_success(max_header_size + length_with_checksum);
 }

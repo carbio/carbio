@@ -85,7 +85,7 @@ public:
     auto request_data = serialize_request<code>(request);
 
     // Build command packet
-    auto cmd_packet_result = protocol_.construct_command_packet(static_cast<command_code>(code), request_data);
+    auto cmd_packet_result = protocol_.construct_command_packet(code, request_data);
     if (!cmd_packet_result)
     {
       return make_error(cmd_packet_result.error());
@@ -104,7 +104,7 @@ public:
 
     // Receive response - read header first
     std::vector<std::uint8_t> header_buffer(packet::max_header_size);
-    std::size_t header_read = serial_.read_exact(header_buffer, std::chrono::milliseconds(1000));
+    std::size_t header_read = serial_.read_exact(header_buffer);
     if (header_read < packet::max_header_size) return make_error(status_code::frame_error);
 
     // Parse length from header (bytes 7-8)
@@ -116,7 +116,7 @@ public:
     std::vector<std::uint8_t> full_packet(packet::max_header_size + length_with_checksum);
     std::copy(header_buffer.begin(), header_buffer.end(), full_packet.begin());
     std::size_t body_read = serial_.read_exact(std::span{full_packet.data() + packet::max_header_size,
-                                                length_with_checksum}, std::chrono::milliseconds(1000));
+                                                length_with_checksum});
     if (body_read < length_with_checksum) return make_error(status_code::frame_error);
 
     // Parse acknowledgment
@@ -164,7 +164,7 @@ public:
     {
       // Read header first
       std::vector<std::uint8_t> header(packet::max_header_size);
-      std::size_t header_read = serial_.read_exact(header, std::chrono::milliseconds(1000));
+      std::size_t header_read = serial_.read_exact(header);
       if (header_read < packet::max_header_size) return make_error(status_code::frame_error);
 
       // Parse length from header (bytes 7-8)
@@ -176,7 +176,7 @@ public:
       std::vector<std::uint8_t> full_packet(packet::max_header_size + length_with_checksum);
       std::copy(header.begin(), header.end(), full_packet.begin());
       std::size_t body_read = serial_.read_exact(std::span{full_packet.data() + packet::max_header_size,
-                                                  length_with_checksum}, std::chrono::milliseconds(1000));
+                                                  length_with_checksum});
       if (body_read < length_with_checksum) return make_error(status_code::frame_error);
 
       // Parse packet

@@ -64,22 +64,25 @@ enum class led_color_setting : std::uint8_t
  */
 [[nodiscard]] inline constexpr std::string_view get_name(led_color_setting setting) noexcept
 {
+  using namespace std::literals;
   switch (setting)
   {
     case led_color_setting::red:
-      return "red";
+      return "red"sv;
     case led_color_setting::blue:
-      return "blue";
+      return "blue"sv;
     case led_color_setting::purple:
-      return "purple";
+      return "purple"sv;
     case led_color_setting::green:
-      return "green";
+      return "green"sv;
     case led_color_setting::yellow:
-      return "yellow";
+      return "yellow"sv;
     case led_color_setting::cyan:
-      return "cyan";
+      return "cyan"sv;
     case led_color_setting::white:
-      return "white";
+      return "white"sv;
+    default:
+      return "unknown"sv;
   }
 };
 
@@ -90,22 +93,25 @@ enum class led_color_setting : std::uint8_t
  */
 [[nodiscard]] inline constexpr std::string_view get_address(led_color_setting setting) noexcept
 {
+  using namespace std::literals;
   switch (setting)
   {
     case led_color_setting::red:
-      return "0x01";
+      return "0x01"sv;
     case led_color_setting::blue:
-      return "0x02";
+      return "0x02"sv;
     case led_color_setting::purple:
-      return "0x03";
+      return "0x03"sv;
     case led_color_setting::green:
-      return "0x04";
+      return "0x04"sv;
     case led_color_setting::yellow:
-      return "0x05";
+      return "0x05"sv;
     case led_color_setting::cyan:
-      return "0x06";
+      return "0x06"sv;
     case led_color_setting::white:
-      return "0x07";
+      return "0x07"sv;
+    default:
+      return "0x00"sv;
   }
 };
 
@@ -116,22 +122,25 @@ enum class led_color_setting : std::uint8_t
  */
 [[nodiscard]] inline constexpr std::string_view get_message(led_color_setting value) noexcept
 {
+  using namespace std::literals;
   switch (value)
   {
     case led_color_setting::red:
-      return "red led color";
+      return "red led color"sv;
     case led_color_setting::blue:
-      return "blue led color";
+      return "blue led color"sv;
     case led_color_setting::purple:
-      return "purple led color";
+      return "purple led color"sv;
     case led_color_setting::green:
-      return "green led color";
+      return "green led color"sv;
     case led_color_setting::yellow:
-      return "yellow led color";
+      return "yellow led color"sv;
     case led_color_setting::cyan:
-      return "cyan led color";
+      return "cyan led color"sv;
     case led_color_setting::white:
-      return "white led color";
+      return "white led color"sv;
+    default:
+      return "unknown led color"sv;
   }
 };
 } /* namespace carbio */

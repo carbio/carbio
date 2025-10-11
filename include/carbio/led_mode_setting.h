@@ -64,20 +64,23 @@ enum class led_mode_setting : std::uint8_t
  */
 [[nodiscard]] inline constexpr std::string_view name(led_mode_setting setting) noexcept
 {
+  using namespace std::literals;
   switch (setting)
   {
     case led_mode_setting::breathing:
-      return "breathing";
+      return "breathing"sv;
     case led_mode_setting::flashing:
-      return "flashing";
+      return "flashing"sv;
     case led_mode_setting::steady_on:
-      return "steady_on";
+      return "steady_on"sv;
     case led_mode_setting::steady_off:
-      return "steady_off";
+      return "steady_off"sv;
     case led_mode_setting::gradual_on:
-      return "gradual_on";
+      return "gradual_on"sv;
     case led_mode_setting::gradual_off:
-      return "gradual_off";
+      return "gradual_off"sv;
+    default:
+      return "unknown"sv;
   }
 };
 
@@ -88,20 +91,23 @@ enum class led_mode_setting : std::uint8_t
  */
 [[nodiscard]] inline constexpr std::string_view get_address(led_mode_setting setting) noexcept
 {
+  using namespace std::literals;
   switch (setting)
   {
     case led_mode_setting::breathing:
-      return "0x01";
+      return "0x01"sv;
     case led_mode_setting::flashing:
-      return "0x02";
+      return "0x02"sv;
     case led_mode_setting::steady_on:
-      return "0x03";
+      return "0x03"sv;
     case led_mode_setting::steady_off:
-      return "0x04";
+      return "0x04"sv;
     case led_mode_setting::gradual_on:
-      return "0x05";
+      return "0x05"sv;
     case led_mode_setting::gradual_off:
-      return "0x06";
+      return "0x06"sv;
+    default:
+      return "0x00"sv;
   }
 };
 
@@ -112,20 +118,23 @@ enum class led_mode_setting : std::uint8_t
  */
 [[nodiscard]] inline constexpr std::string_view get_message(led_mode_setting setting) noexcept
 {
+  using namespace std::literals;
   switch (setting)
   {
     case led_mode_setting::breathing:
-      return "breathing led mode";
+      return "breathing led mode"sv;
     case led_mode_setting::flashing:
-      return "flashing led mode";
+      return "flashing led mode"sv;
     case led_mode_setting::steady_on:
-      return "steady led mode (on)";
+      return "steady led mode (on)"sv;
     case led_mode_setting::steady_off:
-      return "steady led mode (off)";
+      return "steady led mode (off)"sv;
     case led_mode_setting::gradual_on:
-      return "gradual led mode (on)";
+      return "gradual led mode (on)"sv;
     case led_mode_setting::gradual_off:
-      return "gradual led mode (off)";
+      return "gradual led mode (off)"sv;
+    default:
+      return "unknown led mode"sv;
   }
 };
 } /* namespace carbio */

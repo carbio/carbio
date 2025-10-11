@@ -22,7 +22,7 @@ namespace carbio::security
  * - Single-use tokens (burned after validation)
  * - Automatic cleanup of expired tokens
  */
-class SessionManager : public QObject
+class SessionManager final : public QObject
 {
   Q_OBJECT
 
