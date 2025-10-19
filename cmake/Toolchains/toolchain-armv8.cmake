@@ -1,4 +1,5 @@
 include_guard(GLOBAL)
+set(CMAKE_CONFIGURATION_TYPES Debug Profile Release ASan TSan UBSan Rtsan)
 
 # ------------------------------------------------------------------- #
 # System specification
@@ -80,6 +81,8 @@ string(JOIN " " GCC_COMPILE_FLAGS_ARCH
 string(JOIN " " GCC_COMPILE_FLAGS_BASE
   -Wall -Wextra -Wpedantic -Wuninitialized -Wmissing-include-dirs
   -Wshadow -Wundef -Winvalid-pch
+  #-Wfatal-errors
+  #-Werror
 )
 
 string(JOIN " " GCC_COMPILE_FLAGS_FLOW
@@ -153,8 +156,17 @@ set(GCC_COMPILE_FLAGS_DEBUG "-DDEBUG -O0 -g")
 set(CMAKE_C_FLAGS_DEBUG "${GCC_COMPILE_FLAGS_DEBUG}")
 set(CMAKE_CXX_FLAGS_DEBUG "${GCC_COMPILE_FLAGS_DEBUG}")
 
+# Profile
+set(GCC_COMPILE_FLAGS_PROFILE "-DNDEBUG -O2 -fno-omit-frame-pointer -fdata-sections -ffunction-sections")
+set(GCC_LINK_FLAGS_PROFILE "-Wl,-z,separate-code,-z,nodlopen,-z,noexecstack,-z,now,-z,relro,--gc-sections,--as-needed")
+set(CMAKE_C_FLAGS_RELWITHDEBINFO "${GCC_COMPILE_FLAGS_PROFILE}")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${GCC_COMPILE_FLAGS_PROFILE}")
+set(CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO "${GCC_LINK_FLAGS_PROFILE}")
+set(CMAKE_SHARED_LINKER_FLAGS_RELWITHDEBINFO "${GCC_LINK_FLAGS_PROFILE}")
+set(CMAKE_MODULE_LINKER_FLAGS_RELWITHDEBINFO "${GCC_LINK_FLAGS_PROFILE}")
+
 # Release
-set(GCC_COMPILE_FLAGS_RELEASE "-DNDEBUG -O2 -s -fdata-sections -ffunction-sections")
+set(GCC_COMPILE_FLAGS_RELEASE "-DNDEBUG -O3 -s -fdata-sections -ffunction-sections")
 set(GCC_LINK_FLAGS_RELEASE "-Wl,-z,separate-code,-z,nodlopen,-z,noexecstack,-z,now,-z,relro,--gc-sections,--as-needed,--discard-all,--strip-all")
 set(CMAKE_C_FLAGS_RELEASE "${GCC_COMPILE_FLAGS_RELEASE}")
 set(CMAKE_CXX_FLAGS_RELEASE "${GCC_COMPILE_FLAGS_RELEASE}")
@@ -162,21 +174,33 @@ set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${GCC_LINK_FLAGS_RELEASE}")
 set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${GCC_LINK_FLAGS_RELEASE}")
 set(CMAKE_MODULE_LINKER_FLAGS_RELEASE "${GCC_LINK_FLAGS_RELEASE}")
 
-# RelWithDebInfo
-set(GCC_COMPILE_FLAGS_RELWITHDEBINFO "-DNDEBUG -O2 -g -fdata-sections -ffunction-sections")
-set(GCC_LINK_FLAGS_RELWITHDEBINFO "-Wl,-z,separate-code,-z,nodlopen,-z,noexecstack,-z,now,-z,relro,--gc-sections,--as-needed")
-set(CMAKE_C_FLAGS_RELWITHDEBINFO "${GCC_COMPILE_FLAGS_RELWITHDEBINFO}")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${GCC_COMPILE_FLAGS_RELWITHDEBINFO}")
-set(CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO "${GCC_LINK_FLAGS_RELWITHDEBINFO}")
-set(CMAKE_SHARED_LINKER_FLAGS_RELWITHDEBINFO "${GCC_LINK_FLAGS_RELWITHDEBINFO}")
-set(CMAKE_MODULE_LINKER_FLAGS_RELWITHDEBINFO "${GCC_LINK_FLAGS_RELWITHDEBINFO}")
+# Address Sanitizer configuration
+string(JOIN " " CMAKE_C_FLAGS_ASAN "-DNDEBUG" "-D_ASAN" "-O1" "-g" "-fno-omit-frame-pointer" "-fsanitize=address" "-fsanitize=pointer-compare" "-fsanitize=pointer-subtract" "-fsanitize=leak")
+string(JOIN " " CMAKE_CXX_FLAGS_ASAN "-DNDEBUG" "-D_ASAN" "-O1" "-g" "-fno-omit-frame-pointer" "-fsanitize=address" "-fsanitize=pointer-compare" "-fsanitize=pointer-subtract" "-fsanitize=leak")
+set(CMAKE_EXE_LINKER_FLAGS_ASAN "-fsanitize=address -fsanitize=leak")
+set(CMAKE_SHARED_LINKER_FLAGS_ASAN "-fsanitize=address -fsanitize=leak")
+set(CMAKE_MODULE_LINKER_FLAGS_ASAN "-fsanitize=address -fsanitize=leak")
 
-# MinSizeRel
-set(CMAKE_C_FLAGS_MINSIZEREL "${GCC_COMPILE_FLAGS_RELEASE}")
-set(CMAKE_CXX_FLAGS_MINSIZEREL "${GCC_COMPILE_FLAGS_RELEASE}")
-set(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "${GCC_LINK_FLAGS_RELEASE}")
-set(CMAKE_SHARED_LINKER_FLAGS_MINSIZEREL "${GCC_LINK_FLAGS_RELEASE}")
-set(CMAKE_MODULE_LINKER_FLAGS_MINSIZEREL "${GCC_LINK_FLAGS_RELEASE}")
+# Thread Sanitizer configuration
+string(JOIN " " CMAKE_C_FLAGS_TSAN "-DNDEBUG" "-D_TSAN" "-O1" "-g" "-fno-omit-frame-pointer" "-fsanitize=thread")
+string(JOIN " " CMAKE_CXX_FLAGS_TSAN "-DNDEBUG" "-D_TSAN" "-O1" "-g" "-fno-omit-frame-pointer" "-fsanitize=thread")
+set(CMAKE_EXE_LINKER_FLAGS_TSAN "-fsanitize=thread")
+set(CMAKE_SHARED_LINKER_FLAGS_TSAN "-fsanitize=thread")
+set(CMAKE_MODULE_LINKER_FLAGS_TSAN "-fsanitize=thread")
+
+# Undefined Behavior Sanitizer configuration
+string(JOIN " " CMAKE_C_FLAGS_UBSAN "-DNDEBUG" "-D_UBSAN" "-O1" "-g" "-fno-omit-frame-pointer" "-fsanitize=undefined" "-fsanitize=bounds-strict" "-fsanitize=float-divide-by-zero" "-fsanitize=float-cast-overflow")
+string(JOIN " " CMAKE_CXX_FLAGS_UBSAN "-DNDEBUG" "-D_UBSAN" "-O1" "-g" "-fno-omit-frame-pointer" "-fsanitize=undefined" "-fsanitize=bounds-strict" "-fsanitize=float-divide-by-zero" "-fsanitize=float-cast-overflow")
+set(CMAKE_EXE_LINKER_FLAGS_UBSAN "-fsanitize=undefined")
+set(CMAKE_SHARED_LINKER_FLAGS_UBSAN "-fsanitize=undefined")
+set(CMAKE_MODULE_LINKER_FLAGS_UBSAN "-fsanitize=undefined")
+
+# Real-Time santizing configuration
+string(JOIN " " CMAKE_C_FLAGS_RTSAN "-DNDEBUG" "-D_UBSAN" "-O1" "-g" "-fno-omit-frame-pointer" "-fsanitize=realtime")
+string(JOIN " " CMAKE_CXX_FLAGS_RTSAN "-DNDEBUG" "-D_UBSAN" "-O1" "-g" "-fno-omit-frame-pointer" "-fsanitize=realtime")
+set(CMAKE_EXE_LINKER_FLAGS_UBSAN "-fsanitize=realtime")
+set(CMAKE_SHARED_LINKER_FLAGS_UBSAN "-fsanitize=realtime")
+set(CMAKE_MODULE_LINKER_FLAGS_UBSAN "-fsanitize=realtime")
 
 foreach (cmp IN ITEMS C CXX ASM)
 message(STATUS "CMAKE_${cmp}_FLAGS: ${CMAKE_${cmp}_FLAGS}")
@@ -240,5 +264,3 @@ if(NOT CPU_COUNT EQUAL 0)
     # Building with unix makefiles, 'cmake --build build -j <n>' works properly.
   endif()
 endif()
-
-

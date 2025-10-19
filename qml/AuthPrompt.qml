@@ -31,8 +31,8 @@ Rectangle {
     property int failedAttempts: 0
     property int lockoutSeconds: 0
     property int maxLockoutSeconds: 20
-    property string driverName: ""
     property bool isProcessing: false
+    property int scanProgress: 0  // 0-100
 
     // Monitor state transitions to ensure clean resets
     onAuthStateChanged: {
@@ -136,6 +136,7 @@ Rectangle {
         enabled: false
         failedAttempts: authPrompt.failedAttempts
         isScanning: opacity > 0.5 && enabled
+        scanProgress: 0  // No progress in scanning state
     }
 
     AuthProgress {
@@ -146,6 +147,7 @@ Rectangle {
         visible: false
         enabled: false
         isProcessing: opacity > 0.5 && enabled
+        scanProgress: authPrompt.scanProgress
     }
 
     // ALERT State - Security lockout
@@ -169,10 +171,8 @@ Rectangle {
     }
 
     // Functions to trigger animations
-    function showSuccess(name) {
-        driverName = name
+    function showSuccess() {
         feedbackOverlay.feedbackType = "success"
-        feedbackOverlay.driverName = name
         feedbackOverlay.show()
     }
 

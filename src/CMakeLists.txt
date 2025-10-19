@@ -5,60 +5,46 @@ PUBLIC
 FILE_SET HEADERS
 BASE_DIRS ${CMAKE_CURRENT_LIST_DIR}/../include
 FILES
-  ../include/carbio/assert.h
-  ../include/carbio/baud_rate_setting.h
-  ../include/carbio/command_code.h
-  ../include/carbio/command_executor.h
-  ../include/carbio/command_serializer.h
-  ../include/carbio/command_traits.h
-  ../include/carbio/data_length_setting.h
-  ../include/carbio/device_info.h
-  ../include/carbio/device_setting_index.h
-  ../include/carbio/device_setting_info.h
-  ../include/carbio/endian.h
-  ../include/carbio/fingerprint_sensor.h
-  ../include/carbio/floating_point.h
-  ../include/carbio/led_color_setting.h
-  ../include/carbio/led_mode_setting.h
-  ../include/carbio/match_query_info.h
-  ../include/carbio/packet_id.h
-  ../include/carbio/packet.h
-  ../include/carbio/protocol_handler.h
-  ../include/carbio/result.h
-  ../include/carbio/search_query_info.h
-  ../include/carbio/security_level_setting.h
-  ../include/carbio/serial_port.h
-  ../include/carbio/status_code.h
+  ../include/carbio/core/assert.h
+  ../include/carbio/fingerprint/baud_rate_setting.h
+  ../include/carbio/fingerprint/command_code.h
+  ../include/carbio/fingerprint/command_executor.h
+  ../include/carbio/fingerprint/command_serializer.h
+  ../include/carbio/fingerprint/command_traits.h
+  ../include/carbio/fingerprint/device_info.h
+  ../include/carbio/fingerprint/device_setting_index.h
+  ../include/carbio/fingerprint/device_setting_info.h
+  ../include/carbio/fingerprint/fingerprint_sensor.h
+  ../include/carbio/fingerprint/led_color_setting.h
+  ../include/carbio/fingerprint/led_mode_setting.h
+  ../include/carbio/fingerprint/match_query_info.h
+  ../include/carbio/fingerprint/packet_data_length_setting.h
+  ../include/carbio/fingerprint/packet_id.h
+  ../include/carbio/fingerprint/packet.h
+  ../include/carbio/fingerprint/protocol_handler.h
+  ../include/carbio/fingerprint/result.h
+  ../include/carbio/fingerprint/search_query_info.h
+  ../include/carbio/fingerprint/security_level_setting.h
+  ../include/carbio/fingerprint/status_code.h
+  ../include/carbio/io/handle.h
+  ../include/carbio/io/handle_traits.h
+  ../include/carbio/io/serial_port.h
+  ../include/carbio/utility/blocking_queue.h
+  ../include/carbio/utility/endian.h
+  ../include/carbio/utility/floating_point.h
+  ../include/carbio/utility/lockfree_triple_buffer.h
+  ../include/carbio/utility/locked_buffer.h
+  ../include/carbio/utility/spinlock.h
 
 PRIVATE
-  $<$<PLATFORM_ID:Linux>:serial_port_unix.cpp>
-  $<$<PLATFORM_ID:Linux>:serial_port_unix.h>
-  $<$<PLATFORM_ID:Linux>:descriptor_traits_unix.h>
-  baud_rate_setting.cpp
-  command_code.cpp
-  command_executor.cpp
-  command_traits.cpp
-  data_length_setting.cpp
-  descriptor_traits.h
-  descriptor.h
-  descriptor.cpp
-  device_info.cpp
-  device_setting_index.cpp
-  device_setting_info.cpp
-  endian.cpp
-  fingerprint_sensor.cpp
-  floating_point.cpp
-  led_color_setting.cpp
-  led_mode_setting.cpp
-  match_query_info.cpp
-  packet_id.cpp
-  packet.cpp
-  protocol_handler.cpp
-  result.cpp
-  search_query_info.cpp
-  security_level_setting.cpp
-  serial_port.cpp
-  status_code.cpp
+  fingerprint/device_info.cpp
+  fingerprint/device_setting_info.cpp
+  fingerprint/fingerprint_sensor.cpp
+  fingerprint/match_query_info.cpp
+  fingerprint/packet.cpp
+  fingerprint/protocol_handler.cpp
+  fingerprint/search_query_info.cpp
+  io/serial_port.cpp
 )
 
 target_include_directories(carbio
@@ -71,10 +57,4 @@ PRIVATE
 
 find_package(spdlog CONFIG REQUIRED)
 target_link_libraries(carbio spdlog::spdlog_header_only)
-
-target_compile_features(carbio PUBLIC cxx_std_23)
-
-#find_package(Qt6 CONFIG REQUIRED COMPONENTS SerialPort)
-#target_link_libraries(carbio Qt6::SerialPort)
-
 install(TARGETS carbio FILE_SET HEADERS)

@@ -11,15 +11,8 @@ qt_add_executable(carbiod
   radialbar.h
   controller.h
   controller.cpp
-  admin_authenticator.h
-  admin_authenticator.cpp
-  session_manager.h
-  session_manager.cpp
-  audit_logger.h
-  audit_logger.cpp
-  profile_manager.h
-  profile_manager.cpp
-  security_types.h
+  sensor_worker.h
+  sensor_worker.cpp
   ${QRC_QML}
   ${QRC_RES}
 )
@@ -29,15 +22,12 @@ target_include_directories(carbiod PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-find_package(OpenSSL REQUIRED)
-
 target_link_libraries(carbiod PRIVATE
   Qt6::Core
   Qt6::Gui
   Qt6::Qml
   Qt6::Quick
   carbio
-  OpenSSL::Crypto
 )
 
 set_target_properties(carbiod PROPERTIES AUTOMOC TRUE)

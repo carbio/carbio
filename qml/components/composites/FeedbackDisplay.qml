@@ -6,7 +6,6 @@ Item {
 
     // Props
     property string feedbackType: "success"  // "success" or "failure"
-    property string driverName: ""           // Used for success
     property int attempts: 0                 // Used for failure
 
     // Dimensions

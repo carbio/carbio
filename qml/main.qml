@@ -51,7 +51,10 @@ ApplicationWindow {
     Shortcut {
         sequence: "Ctrl+Q"
         context: Qt.ApplicationShortcut
-        onActivated: Qt.quit()
+        onActivated: {
+            controller.cleanupBeforeExit()
+            Qt.quit()
+        }
     }
 
     Image {
@@ -192,8 +195,8 @@ ApplicationWindow {
         */
         Gauge {
             id: speedLabel
-            width: 450
-            height: 450
+            width: 800
+            height: 800
             property bool accelerating
             value: accelerating ? maximumValue : 0
             maximumValue: 200
@@ -247,6 +250,7 @@ ApplicationWindow {
             color: "#D9D9D9"
             border.color: speedColor(maxSpeedlabel.text)
             border.width: 10
+            visible: false
 
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: parent.bottom
@@ -266,6 +270,7 @@ ApplicationWindow {
                 }
             }
         }
+
         Image {
             anchors{
                 bottom: car.top
@@ -273,6 +278,7 @@ ApplicationWindow {
                 horizontalCenter:car.horizontalCenter
             }
             source: "qrc:/model_3.png"
+            visible: false
         }
 
         Image {
@@ -283,6 +289,7 @@ ApplicationWindow {
                 horizontalCenter:speedLimit.horizontalCenter
             }
             source: "qrc:/car.svg"
+            visible: false
         }
 
         /*
@@ -299,6 +306,7 @@ ApplicationWindow {
                 bottom: parent.bottom
                 bottomMargin: 26.50
             }
+            visible: false
 
             source: "qrc:/vector2.svg"
         }
@@ -347,6 +355,7 @@ ApplicationWindow {
                 bottom: parent.bottom
                 bottomMargin: 26.50
             }
+            visible: false
 
             source: "qrc:/vector1.svg"
         }
@@ -738,17 +747,17 @@ ApplicationWindow {
             id: authPrompt
             anchors.fill: parent
             authState: controller.authState
+            scanProgress: controller.scanProgress
             failedAttempts: controller.failedAttempts
             lockoutSeconds: controller.lockoutSeconds
-            driverName: controller.driverName
             isProcessing: controller.isProcessing
             z: 100
             onAuthPromptHiding: {}
 
             Connections {
                 target: controller
-                function onAuthenticationSuccess(driverName) {
-                    authPrompt.showSuccess(driverName)
+                function onAuthenticationSuccess() {
+                    authPrompt.showSuccess()
                 }
                 function onAuthenticationFailed() {
                     authPrompt.showFailure(controller.failedAttempts)
@@ -761,19 +770,10 @@ ApplicationWindow {
             z: 300
         }
 
-        AdminPasswordDialog {
-            id: adminPasswordDialog
-            onPasswordSubmitted: function(password) {
-                controller.verifyAdminPassword(password)
-            }
-            onCancelled: {
-                controller.revokeAdminAccess()
-            }
-        }
-
-        // Fingerprint verification prompt
-        InfoDialog {
-            id: fingerprintDialog
+        // Admin fingerprint verification with real-time feedback
+        AdminFingerprintDialog {
+            id: adminFingerprintDialog
+            scanProgress: controller.scanProgress
         }
 
         UnauthorizedAccessWarning {
@@ -785,15 +785,11 @@ ApplicationWindow {
 
         FingerprintSetupDialog {
             id: fingerprintSetupDialog
-            //anchors.fill: parent
-            //anchors.centerIn: parent
-            //z: 100
         }
 
         // Info dialog for detailed messages
         InfoDialog {
             id: infoDialog
-            //z: 350
         }
 
         Connections {
@@ -829,32 +825,32 @@ ApplicationWindow {
             }
 
             function onAdminFingerprintRequired() {
-                fingerprintDialog.show("Biometric Verification",
-                    "Step 2 of 2: Place your admin fingerprint on the sensor...",
-                    false)
+                adminFingerprintDialog.open()
                 controller.startAdminFingerprintScan()
             }
 
             function onAdminAccessGranted(token) {
-                fingerprintDialog.show("Access Granted", "Admin access granted. Opening settings...", false)
+                adminFingerprintDialog.close()
+                toast.show("Admin access granted. Opening settings...", false)
                 // Show menu after short delay
                 adminAccessTimer.start()
             }
 
             function onAdminAccessDenied(reason) {
-                fingerprintDialog.show("Access Denied", reason, true)
+                adminFingerprintDialog.close()
+                toast.show("Access Denied: " + reason, true)
             }
 
             function onUnauthorizedAccessDetected(details) {
                 // Close any open dialogs
                 adminPasswordDialog.close()
-                fingerprintDialog.close()
+                adminFingerprintDialog.close()
                 // Show warning
                 unauthorizedAccessWarning.show(details)
             }
             function onAdminAccessRevoked() {
                 adminPasswordDialog.close()
-                fingerprintDialog.close()
+                adminFingerprintDialog.close()
                 infoDialog.close()
                 unauthorizedAccessWarning.close()
                 fingerprintSetupDialog.close()
@@ -868,7 +864,7 @@ ApplicationWindow {
             repeat: false
             onTriggered: {
                 fingerprintSetupDialog.open()
-                fingerprintDialog.close()
+                adminFingerprintDialog.close()
             }
         }
     }
@@ -915,6 +911,7 @@ ApplicationWindow {
             }
 
             onClicked: {
+                controller.cleanupBeforeExit()
                 Qt.quit()
             }
         }
