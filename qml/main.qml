@@ -51,7 +51,10 @@ ApplicationWindow {
     Shortcut {
         sequence: "Ctrl+Q"
         context: Qt.ApplicationShortcut
-        onActivated: Qt.quit()
+        onActivated: {
+            controller.cleanupBeforeExit()
+            Qt.quit()
+        }
     }
 
     Image {
@@ -192,8 +195,8 @@ ApplicationWindow {
         */
         Gauge {
             id: speedLabel
-            width: 450
-            height: 450
+            width: 800
+            height: 800
             property bool accelerating
             value: accelerating ? maximumValue : 0
             maximumValue: 200
@@ -247,6 +250,7 @@ ApplicationWindow {
             color: "#D9D9D9"
             border.color: speedColor(maxSpeedlabel.text)
             border.width: 10
+            visible: false
 
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: parent.bottom
@@ -266,6 +270,7 @@ ApplicationWindow {
                 }
             }
         }
+
         Image {
             anchors{
                 bottom: car.top
@@ -273,6 +278,7 @@ ApplicationWindow {
                 horizontalCenter:car.horizontalCenter
             }
             source: "qrc:/model_3.png"
+            visible: false
         }
 
         Image {
@@ -283,6 +289,7 @@ ApplicationWindow {
                 horizontalCenter:speedLimit.horizontalCenter
             }
             source: "qrc:/car.svg"
+            visible: false
         }
 
         /*
@@ -299,6 +306,7 @@ ApplicationWindow {
                 bottom: parent.bottom
                 bottomMargin: 26.50
             }
+            visible: false
 
             source: "qrc:/vector2.svg"
         }
@@ -347,6 +355,7 @@ ApplicationWindow {
                 bottom: parent.bottom
                 bottomMargin: 26.50
             }
+            visible: false
 
             source: "qrc:/vector1.svg"
         }
@@ -741,15 +750,14 @@ ApplicationWindow {
             scanProgress: controller.scanProgress
             failedAttempts: controller.failedAttempts
             lockoutSeconds: controller.lockoutSeconds
-            driverName: controller.driverName
             isProcessing: controller.isProcessing
             z: 100
             onAuthPromptHiding: {}
 
             Connections {
                 target: controller
-                function onAuthenticationSuccess(driverName) {
-                    authPrompt.showSuccess(driverName)
+                function onAuthenticationSuccess() {
+                    authPrompt.showSuccess()
                 }
                 function onAuthenticationFailed() {
                     authPrompt.showFailure(controller.failedAttempts)
@@ -760,16 +768,6 @@ ApplicationWindow {
         Toast {
             id: toast
             z: 300
-        }
-
-        AdminPasswordDialog {
-            id: adminPasswordDialog
-            onPasswordSubmitted: function(password) {
-                controller.verifyAdminPassword(password)
-            }
-            onCancelled: {
-                controller.revokeAdminAccess()
-            }
         }
 
         // Admin fingerprint verification with real-time feedback
@@ -913,6 +911,7 @@ ApplicationWindow {
             }
 
             onClicked: {
+                controller.cleanupBeforeExit()
                 Qt.quit()
             }
         }

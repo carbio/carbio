@@ -15,7 +15,6 @@
         <file>QueryDialog.qml</file>
         <file>SystemConfigDialog.qml</file>
         <file>VerifyDialog.qml</file>
-        <file>AdminPasswordDialog.qml</file>
         <file>AdminFingerprintDialog.qml</file>
         <file>UnauthorizedAccessWarning.qml</file>
 

@@ -25,6 +25,7 @@ target_link_libraries(unit_tests
 
 target_compile_options(unit_tests PRIVATE
   -Wno-global-constructors
+  -Wstack-usage=4096
   -Wframe-larger-than=4096
   -Wno-exit-time-destructors
 )

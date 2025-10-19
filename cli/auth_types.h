@@ -1,46 +1,63 @@
-#ifndef AUTH_TYPES_H
-#define AUTH_TYPES_H
+/**********************************************************************
+ * Project   : Vehicle access control through biometric
+ *             authentication
+ * Author    : Rajmund Kail
+ * Institute : Óbuda University
+ * Faculty   : John von Neumann Faculty of Informatics
+ * Dept.     : Computer Science Engineering
+ * Year      : 2025
+ *
+ * License:
+ *   Permission is hereby granted, free of charge, to any person
+ *   obtaining a copy of this software and associated documentation
+ *   files (the "Software"), to deal in the Software without
+ *   restriction, including without limitation the rights to use,
+ *   copy, modify, merge, publish, distribute, sublicense, and/or
+ *   sell copies of the Software, subject to the following
+ *   conditions:
+ *
+ *   The above copyright notice and this permission notice shall
+ *   be included in all copies or substantial portions of the
+ *   Software.
+ *
+ * Disclaimer:
+ *   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
+ *   KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+ *   WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+ *   PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS
+ *   OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ *   OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+ *   OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+ *   SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ *********************************************************************/
+
+#pragma once
 
 #include <cstdint>
-#include <string_view>
 
-// Byte-sized enum for authentication state machine
-enum class AuthState : uint8_t
-{
-  OFF            = 0,
-  SCANNING       = 1,
-  AUTHENTICATING = 2,
-  ALERT          = 3,
-  ON             = 4
+enum class AuthState : std::uint8_t {
+  Off = 0,
+  Scanning = 1,
+  Authenticating = 2,
+  Alert = 3,
+  On = 4
 };
 
-// Compile-time string conversion for AuthState
-[[nodiscard]] inline constexpr std::string_view authStateToString(AuthState state) noexcept
-{
-  switch (state)
-  {
-  case AuthState::OFF:
-    return "OFF";
-  case AuthState::SCANNING:
-    return "SCANNING";
-  case AuthState::AUTHENTICATING:
-    return "AUTHENTICATING";
-  case AuthState::ALERT:
-    return "ALERT";
-  case AuthState::ON:
-    return "ON";
+[[nodiscard]] inline constexpr const char *name(AuthState state) noexcept {
+  switch (state) {
+  case AuthState::Off:
+    return "Off";
+  case AuthState::Scanning:
+    return "Scanning";
+  case AuthState::Authenticating:
+    return "Authenticating";
+  case AuthState::Alert:
+    return "Alert";
+  case AuthState::On:
+    return "On";
   default:
-    return "UNKNOWN";
+    return "<unknown enum value>";
   }
 }
 
-// Authentication result
-enum class AuthResult : uint8_t
-{
-  Success,
-  Failed,
-  Cancelled,
-  Timeout
-};
-
-#endif // AUTH_TYPES_H
+enum class AuthResult : std::uint8_t { Success, Failed, Cancelled, Timeout };

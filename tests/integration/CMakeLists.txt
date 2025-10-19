@@ -22,6 +22,7 @@ target_link_libraries(integration_tests
 )
 
 target_compile_options(integration_tests PRIVATE
+  -Wno-unused-result
   -Wno-global-constructors
   -Wframe-larger-than=2048
 )

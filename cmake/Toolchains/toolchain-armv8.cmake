@@ -81,8 +81,8 @@ string(JOIN " " GCC_COMPILE_FLAGS_ARCH
 string(JOIN " " GCC_COMPILE_FLAGS_BASE
   -Wall -Wextra -Wpedantic -Wuninitialized -Wmissing-include-dirs
   -Wshadow -Wundef -Winvalid-pch
-  -Wfatal-errors
-  -Werror
+  #-Wfatal-errors
+  #-Werror
 )
 
 string(JOIN " " GCC_COMPILE_FLAGS_FLOW

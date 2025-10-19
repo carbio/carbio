@@ -1,5 +1,4 @@
-#include "carbio/fingerprint_sensor.h"
-#include "carbio/profile_store.h"
+#include "carbio/fingerprint/fingerprint_sensor.h"
 
 #include <spdlog/spdlog.h>
 
@@ -9,28 +8,24 @@
 #include <string>
 #include <thread>
 
-using namespace carbio;
+using namespace carbio::fingerprint;
 
 // Helper function to get device capacity for searches
-static uint16_t getDeviceCapacity(fingerprint_sensor &sensor)
-{
+static uint16_t getDeviceCapacity(fingerprint_sensor &sensor) {
   auto params = sensor.get_device_setting_info();
   return params ? params->capacity : 127; // Default to 127 if read fails
 }
 
-[[maybe_unused]] static bool getFingerprint(fingerprint_sensor &sensor)
-{
+[[maybe_unused]] static bool getFingerprint(fingerprint_sensor &sensor) {
   std::cout << "Waiting for image..." << std::endl;
 
-  while (!sensor.capture_image())
-  {
+  while (!sensor.capture_image()) {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
 
   std::cout << "Templating..." << std::endl;
 
-  if (!sensor.extract_features(1))
-  {
+  if (!sensor.extract_features(1)) {
     return false;
   }
 
@@ -42,82 +37,66 @@ static uint16_t getDeviceCapacity(fingerprint_sensor &sensor)
   return result.has_value();
 }
 
-static std::optional<search_query_info> getFingerprintDetail(fingerprint_sensor &sensor)
-{
-  std::cout << "Getting image..." << std::flush;
+static std::optional<search_query_info>
+getFingerprintDetail(fingerprint_sensor &sensor) {
+  std::cout << "Place finger on sensor..." << std::endl;
 
   void_result status;
-  while ((status = sensor.capture_image()).error() == status_code::no_finger)
-  {
+  while (true) {
+    status = sensor.capture_image();
+    if (status) {
+      std::cout << "Image captured successfully" << std::endl;
+      break;
+    }
+    if (status.error() != status_code::no_finger) {
+      std::cout << "Error: " << message(status.error()) << std::endl;
+      return std::nullopt;
+    }
+    // No finger detected, keep polling
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  }
-
-  if (status)
-  {
-    std::cout << "Image taken" << std::endl;
-  }
-  else
-  {
-    std::cout << "Error: " << get_message(status.error()) << std::endl;
-    return std::nullopt;
   }
 
   std::cout << "Templating..." << std::flush;
 
   status = sensor.extract_features(1);
-  if (status)
-  {
+  if (status) {
     std::cout << "Templated" << std::endl;
-  }
-  else
-  {
-    std::cout << "Error: " << get_message(status.error()) << std::endl;
+  } else {
+    std::cout << "Error: " << message(status.error()) << std::endl;
     return std::nullopt;
   }
 
-  std::cout << "Searching..." << std::flush;
+  std::cout << "Searching database..." << std::flush;
 
   uint16_t capacity = getDeviceCapacity(sensor);
   auto result = sensor.fast_search_model(0, 1, capacity);
-  if (result)
-  {
-    std::cout << "Found fingerprint!" << std::endl;
+  if (result) {
+    std::cout << "Found!" << std::endl;
     return *result; // Convert result<T> to optional<T>
-  }
-  else
-  {
-    std::cout << "No match found" << std::endl;
+  } else {
+    std::cout << "No match found in database" << std::endl;
     return std::nullopt;
   }
 }
 
-/// @brief Enroll a new fingerprint with profile
-static bool enrollFinger(fingerprint_sensor &sensor, profile_store &profiles, uint16_t location,
-                  std::string_view name, bool isAdmin)
-{
-  for (int fingerImg = 1; fingerImg <= 2; ++fingerImg)
-  {
-    if (fingerImg == 1)
+/// @brief Enroll a new fingerprint (names not stored per security requirements)
+static bool enrollFinger(fingerprint_sensor &sensor, uint16_t location) {
+  static constexpr std::uint8_t sampleCount = 4;
+  for (int fingerImg = 1; fingerImg <= sampleCount; ++fingerImg) {
+    if (fingerImg < sampleCount)
       std::cout << "Place finger on sensor..." << std::flush;
-    else
-      std::cout << "Place same finger again..." << std::flush;
 
-    while (true)
-    {
+    while (true) {
       auto status = sensor.capture_image();
-      if (status)
-      {
+      if (status) {
         std::cout << "Image taken" << std::endl;
         break;
       }
-      if (status.error() == status_code::no_finger)
-      {
+      if (status.error() == status_code::no_finger) {
         std::cout << "." << std::flush;
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
-      }
-      else
-      {
-        std::cout << "\nError: " << get_message(status.error()) << std::endl;
+      } else {
+        std::cout << "\nError: " << message(status.error()) << std::endl;
         return false;
       }
     }
@@ -125,23 +104,18 @@ static bool enrollFinger(fingerprint_sensor &sensor, profile_store &profiles, ui
     std::cout << "Templating..." << std::flush;
 
     auto status = sensor.extract_features(fingerImg);
-    if (status)
-    {
+    if (status) {
       std::cout << "Templated" << std::endl;
-    }
-    else
-    {
-      std::cout << "\nError: " << get_message(status.error()) << std::endl;
+    } else {
+      std::cout << "\nError: " << message(status.error()) << std::endl;
       return false;
     }
 
-    if (fingerImg == 1)
-    {
+    if (fingerImg < sampleCount) {
       std::cout << "Remove finger" << std::endl;
       std::this_thread::sleep_for(std::chrono::seconds(1));
 
-      while (sensor.capture_image().error() != status_code::no_finger)
-      {
+      while (sensor.capture_image().error() != status_code::no_finger) {
         // Wait for finger to be removed
       }
     }
@@ -150,68 +124,44 @@ static bool enrollFinger(fingerprint_sensor &sensor, profile_store &profiles, ui
   std::cout << "Creating model..." << std::flush;
 
   auto status = sensor.create_model();
-  if (status)
-  {
+  if (status) {
     std::cout << "Created" << std::endl;
-  }
-  else
-  {
-    std::cout << "\nError: " << get_message(status.error()) << std::endl;
+  } else {
+    std::cout << "\nError: " << message(status.error()) << std::endl;
     return false;
   }
 
   std::cout << "Storing model #" << location << "..." << std::flush;
 
   status = sensor.store_model(location);
-  if (status)
-  {
+  if (status) {
     std::cout << "Stored" << std::endl;
-  }
-  else
-  {
-    std::cout << "\nError: " << get_message(status.error()) << std::endl;
+    std::cout << "Enrolled fingerprint at ID: " << location << std::endl;
+    std::cout << "Note: Admin privileges assigned to IDs 0-2 by convention"
+              << std::endl;
+  } else {
+    std::cout << "\nError: " << message(status.error()) << std::endl;
     return false;
-  }
-
-  // Save profile to encrypted storage
-  std::cout << "Saving driver profile..." << std::flush;
-  auto profile_result = profiles.add_profile_with_id(name, location, isAdmin);
-  if (profile_result)
-  {
-    std::cout << "Profile saved!" << std::endl;
-    std::cout << "Enrolled: " << name << " (ID: " << location << ", Admin: "
-              << (isAdmin ? "Yes" : "No") << ")" << std::endl;
-  }
-  else
-  {
-    std::cout << "\nWarning: Fingerprint stored but profile save failed: "
-              << get_message(profile_result.error()) << std::endl;
   }
 
   return true;
 }
 
 /// @brief Get a valid template ID from user (1-127)
-static uint16_t getTemplateId()
-{
+static uint16_t getTemplateId() {
   int id = 0;
-  while (id < 1 || id > 127)
-  {
+  while (id < 1 || id > 127) {
     std::cout << "Enter ID # from 1-127: " << std::flush;
 
     std::string line;
     std::getline(std::cin, line);
 
-    try
-    {
+    try {
       id = std::stoi(line);
-      if (id < 1 || id > 127)
-      {
+      if (id < 1 || id > 127) {
         id = 0;
       }
-    }
-    catch (...)
-    {
+    } catch (...) {
       id = 0;
     }
   }
@@ -219,120 +169,117 @@ static uint16_t getTemplateId()
 }
 
 /// @brief Identify fingerprint (find without knowing ID)
-static bool identifyFingerprint(fingerprint_sensor &sensor, profile_store &profiles)
-{
+static bool identifyFingerprint(fingerprint_sensor &sensor) {
   std::cout << "Place finger on sensor..." << std::endl;
 
   void_result status;
-  while ((status = sensor.capture_image()).error() == status_code::no_finger)
-  {
+  while (true) {
+    status = sensor.capture_image();
+    if (status) {
+      std::cout << "Image captured successfully" << std::endl;
+      break;
+    }
+    if (status.error() != status_code::no_finger) {
+      std::cout << "Error: " << message(status.error()) << std::endl;
+      return false;
+    }
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
 
-  if (!status)
-  {
-    std::cout << "Failed to capture image" << std::endl;
+  std::cout << "Templating..." << std::flush;
+
+  if (!sensor.extract_features(1)) {
+    std::cout << "\nFailed to template image" << std::endl;
     return false;
   }
 
-  std::cout << "Image captured, templating..." << std::endl;
-
-  if (!sensor.extract_features(1))
-  {
-    std::cout << "Failed to template image" << std::endl;
-    return false;
-  }
-
-  std::cout << "Searching database..." << std::endl;
+  std::cout << "Templated" << std::endl;
+  std::cout << "Searching database..." << std::flush;
 
   uint16_t capacity = getDeviceCapacity(sensor);
   auto result = sensor.fast_search_model(0, 1, capacity);
-  if (result)
-  {
-    std::cout << "Match found! ID: " << result->index << ", Confidence: " << result->confidence << std::endl;
-
-    // Look up driver profile
-    std::string driver_name = profiles.get_driver_name(result->index);
-    std::cout << "Driver: " << driver_name << std::endl;
+  if (result) {
+    std::cout << "Match found!" << std::endl;
+    std::cout << "ID: " << result->index
+              << ", Confidence: " << result->confidence << std::endl;
 
     // Check if admin
-    if (profiles.is_admin_id(result->index))
-    {
-      std::cout << "Status: ADMIN" << std::endl;
+    if (result->index <= 2) {
+      std::cout << "Status: ADMIN (convention-based)" << std::endl;
+    } else {
+      std::cout << "Status: Regular user" << std::endl;
     }
 
     return true;
-  }
-  else
-  {
+  } else {
     std::cout << "No match found in database" << std::endl;
     return false;
   }
 }
 
 /// @brief Verify specific fingerprint by ID
-static bool verifyFingerprint(fingerprint_sensor &sensor, uint16_t expectedId)
-{
+static bool verifyFingerprint(fingerprint_sensor &sensor, uint16_t expectedId) {
   std::cout << "Place finger on sensor..." << std::endl;
 
   void_result status;
-  while ((status = sensor.capture_image()).error() == status_code::no_finger)
-  {
+  while (true) {
+    status = sensor.capture_image();
+    if (status) {
+      std::cout << "Image captured successfully" << std::endl;
+      break;
+    }
+    if (status.error() != status_code::no_finger) {
+      std::cout << "Error: " << message(status.error()) << std::endl;
+      return false;
+    }
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
 
-  if (!status)
-  {
-    std::cout << "Failed to capture image" << std::endl;
+  std::cout << "Templating..." << std::flush;
+
+  if (!sensor.extract_features(1)) {
+    std::cout << "\nFailed to template image" << std::endl;
     return false;
   }
 
-  std::cout << "Image captured, templating..." << std::endl;
+  std::cout << "Templated" << std::endl;
+  std::cout << "Loading template #" << expectedId << " for comparison..."
+            << std::flush;
 
-  if (!sensor.extract_features(1))
-  {
-    std::cout << "Failed to template image" << std::endl;
+  if (!sensor.load_model(expectedId, 2)) {
+    std::cout << "\nFailed to load template #" << expectedId << std::endl;
     return false;
   }
 
-  std::cout << "Loading template #" << expectedId << " for comparison..." << std::endl;
+  std::cout << "Loaded" << std::endl;
+  std::cout << "Comparing fingerprints..." << std::flush;
 
-  if (!sensor.load_model(expectedId, 2))
-  {
-    std::cout << "Failed to load template #" << expectedId << std::endl;
-    return false;
-  }
-
-  std::cout << "Comparing fingerprints..." << std::endl;
-
-  // Search in a small range around the expected ID
-  auto result = sensor.search_model(expectedId, 1, 1);
-  if (result && result->index == expectedId)
-  {
-    std::cout << "Verification SUCCESS! Confidence: " << result->confidence << std::endl;
+  // Use match_model() for 1:1 comparison (compares buffer 1 vs buffer 2)
+  auto result = sensor.match_model();
+  if (result) {
+    std::cout << "MATCH!" << std::endl;
+    std::cout << "Verification SUCCESS! Confidence: " << result->confidence
+              << std::endl;
     return true;
-  }
-  else
-  {
-    std::cout << "Verification FAILED - fingerprint does not match ID #" << expectedId << std::endl;
+  } else {
+    std::cout << "NO MATCH" << std::endl;
+    std::cout << "Verification FAILED - fingerprint does not match ID #"
+              << expectedId << std::endl;
     return false;
   }
 }
 
 /// @brief Query if a specific template ID exists
-static void queryTemplate(fingerprint_sensor &sensor, uint16_t templateId)
-{
+static void queryTemplate(fingerprint_sensor &sensor, uint16_t templateId) {
   std::array<std::uint8_t, 32> buffer;
   auto result = sensor.read_index_table(buffer);
-  if (!result)
-  {
+  if (!result) {
     std::cout << "Failed to fetch templates" << std::endl;
     return;
   }
 
   // Check if the bit for this template ID is set (32 bytes = 256 templates max)
-  if (templateId >= 256)
-  {
+  if (templateId >= 256) {
     std::cout << "Template ID out of range (max 255)" << std::endl;
     return;
   }
@@ -342,29 +289,25 @@ static void queryTemplate(fingerprint_sensor &sensor, uint16_t templateId)
   std::uint8_t bit_index = templateId % 8;
   bool found = (result->at(byte_index) & (1 << bit_index)) != 0;
 
-  if (found)
-  {
-    std::cout << "Template #" << templateId << " EXISTS in database" << std::endl;
+  if (found) {
+    std::cout << "Template #" << templateId << " EXISTS in database"
+              << std::endl;
 
     // Try to load it to verify it's valid
-    if (sensor.load_model(templateId, 1))
-    {
+    if (sensor.load_model(templateId, 1)) {
       std::cout << "Template is valid and loadable" << std::endl;
+    } else {
+      std::cout << "Warning: Template exists in index but failed to load"
+                << std::endl;
     }
-    else
-    {
-      std::cout << "Warning: Template exists in index but failed to load" << std::endl;
-    }
-  }
-  else
-  {
-    std::cout << "Template #" << templateId << " does NOT exist in database" << std::endl;
+  } else {
+    std::cout << "Template #" << templateId << " does NOT exist in database"
+              << std::endl;
   }
 }
 
 /// @brief LED control menu
-static void ledControl(fingerprint_sensor &sensor)
-{
+static void ledControl(fingerprint_sensor &sensor) {
   std::cout << "\nLED Control:" << std::endl;
   std::cout << "1) Turn LED ON" << std::endl;
   std::cout << "2) Turn LED OFF" << std::endl;
@@ -374,35 +317,27 @@ static void ledControl(fingerprint_sensor &sensor)
   std::string choice;
   std::getline(std::cin, choice);
 
-  if (choice == "1")
-  {
+  if (choice == "1") {
     if (sensor.turn_led_on())
       std::cout << "LED turned ON" << std::endl;
     else
       std::cout << "Failed to turn LED on" << std::endl;
-  }
-  else if (choice == "2")
-  {
+  } else if (choice == "2") {
     if (sensor.turn_led_off())
       std::cout << "LED turned OFF" << std::endl;
     else
       std::cout << "Failed to turn LED off" << std::endl;
-  }
-  else if (choice == "3")
-  {
+  } else if (choice == "3") {
     std::cout << "Current state? (on/off): " << std::flush;
     std::string state;
     std::getline(std::cin, state);
 
-    if (state == "on")
-    {
+    if (state == "on") {
       if (sensor.turn_led_off())
         std::cout << "LED turned OFF" << std::endl;
       else
         std::cout << "Failed to turn LED off" << std::endl;
-    }
-    else
-    {
+    } else {
       if (sensor.turn_led_on())
         std::cout << "LED turned ON" << std::endl;
       else
@@ -412,8 +347,7 @@ static void ledControl(fingerprint_sensor &sensor)
 }
 
 /// @brief System configuration menu
-static void configureSystem(fingerprint_sensor &sensor)
-{
+static void configureSystem(fingerprint_sensor &sensor) {
   std::cout << "\nSystem Configuration:" << std::endl;
   std::cout << "1) Set baud rate" << std::endl;
   std::cout << "2) Set security level" << std::endl;
@@ -425,24 +359,24 @@ static void configureSystem(fingerprint_sensor &sensor)
   std::string choice;
   std::getline(std::cin, choice);
 
-  if (choice == "1")
-  {
+  if (choice == "1") {
     std::cout << "\nBaud Rates:" << std::endl;
-    std::cout << "(1) 9600   (2) 19200  (3) 28800  (4) 38400   (5) 48000   6) 57600" << std::endl;
-    std::cout << "(7) 67200  (8) 76800  (9) 86400 (10) 96000  (11) 105600  (12) 115200" << std::endl;
+    std::cout
+        << "(1) 9600   (2) 19200  (3) 28800  (4) 38400   (5) 48000   6) 57600"
+        << std::endl;
+    std::cout << "(7) 67200  (8) 76800  (9) 86400 (10) 96000  (11) 105600  "
+                 "(12) 115200"
+              << std::endl;
     std::cout << "Select baud rate: " << std::flush;
 
     std::string line;
     std::getline(std::cin, line);
 
-    try
-    {
+    try {
       int baudChoice = std::stoi(line);
-      if (baudChoice >= 1)
-    {
-      baud_rate_setting baud;
-      switch (baudChoice)
-      {
+      if (baudChoice >= 1) {
+        baud_rate_setting baud;
+        switch (baudChoice) {
         case 1:
           baud = baud_rate_setting::_9600;
           break;
@@ -482,157 +416,125 @@ static void configureSystem(fingerprint_sensor &sensor)
         default:
           std::cout << "Invalid baud rate" << std::endl;
           return;
-      }
+        }
 
-      if (sensor.set_baud_rate_setting(baud))
-        std::cout << "Baud rate updated successfully. Reconnect required." << std::endl;
-      else
-        std::cout << "Failed to set baud rate" << std::endl;
+        if (sensor.set_baud_rate_setting(baud))
+          std::cout << "Baud rate updated successfully. Reconnect required."
+                    << std::endl;
+        else
+          std::cout << "Failed to set baud rate" << std::endl;
       }
-    }
-    catch (...)
-    {
+    } catch (...) {
       std::cout << "Invalid input" << std::endl;
     }
-  }
-  else if (choice == "2")
-  {
+  } else if (choice == "2") {
     std::cout << "\nSecurity Levels:" << std::endl;
-    std::cout << "1) Lowest  2) Low  3) Balanced  4) High  5) Highest" << std::endl;
+    std::cout << "1) Lowest  2) Low  3) Balanced  4) High  5) Highest"
+              << std::endl;
     std::cout << "Select security level (1-5): " << std::flush;
 
     std::string line;
     std::getline(std::cin, line);
 
-    try
-    {
+    try {
       int level = std::stoi(line);
-      if (level >= 1 && level <= 5)
-      {
-        security_level_setting secLevel = static_cast<security_level_setting>(level);
+      if (level >= 1 && level <= 5) {
+        security_level_setting secLevel =
+            static_cast<security_level_setting>(level);
         if (sensor.set_security_level_setting(secLevel))
           std::cout << "Security level updated successfully" << std::endl;
         else
           std::cout << "Failed to set security level" << std::endl;
-      }
-      else
-      {
+      } else {
         std::cout << "Invalid input" << std::endl;
       }
-    }
-    catch (...)
-    {
+    } catch (...) {
       std::cout << "Invalid input" << std::endl;
     }
-  }
-  else if (choice == "3")
-  {
+  } else if (choice == "3") {
     std::cout << "\nData Packet Sizes:" << std::endl;
-    std::cout << "0) 32 bytes  1) 64 bytes  2) 128 bytes  3) 256 bytes" << std::endl;
+    std::cout << "0) 32 bytes  1) 64 bytes  2) 128 bytes  3) 256 bytes"
+              << std::endl;
     std::cout << "Select packet size (0-3): " << std::flush;
 
     std::string line;
     std::getline(std::cin, line);
 
-    try
-    {
+    try {
       int size = std::stoi(line);
-      if (size >= 0 && size <= 3)
-      {
-        data_length_setting packetSize = static_cast<data_length_setting>(size);
-        if (sensor.set_data_length_setting(packetSize))
+      if (size >= 0 && size <= 3) {
+        if (sensor.set_packet_data_length_setting(
+                static_cast<packet_data_length_setting>(size)))
           std::cout << "Data packet size updated successfully" << std::endl;
         else
           std::cout << "Failed to set data packet size" << std::endl;
-      }
-      else
-      {
+      } else {
         std::cout << "Invalid input" << std::endl;
       }
-    }
-    catch (...)
-    {
+    } catch (...) {
       std::cout << "Invalid input" << std::endl;
     }
-  }
-  else if (choice == "4")
-  {
+  } else if (choice == "4") {
     std::cout << "Password change not implemented in module" << std::endl;
-  }
-  else if (choice == "5")
-  {
+  } else if (choice == "5") {
     auto params = sensor.get_device_setting_info();
-    if (params)
-    {
+    if (params) {
       std::cout << "\nCurrent System Settings:" << std::endl;
-      std::cout << "Status Register: 0x" << std::hex << params->status << std::endl;
+      std::cout << "Status Register: 0x" << std::hex << params->status
+                << std::endl;
       std::cout << "System ID: 0x" << std::hex << params->id << std::endl;
-      std::cout << "Library Size: " << std::dec << params->capacity << std::endl;
+      std::cout << "Library Size: " << std::dec << params->capacity
+                << std::endl;
       std::cout << "Security Level: " << params->security_level << std::endl;
-      std::cout << "Device Address: 0x" << std::hex << params->address << std::endl;
-      std::cout << "Data Packet Size: " << std::dec << params->length << std::endl;
+      std::cout << "Device Address: 0x" << std::hex << params->address
+                << std::endl;
+      std::cout << "Data Packet Size: " << std::dec << params->length
+                << std::endl;
       std::cout << "Baud Rate: " << params->baudrate << std::endl;
-    }
-    else
-    {
+    } else {
       std::cout << "Failed to read system parameters" << std::endl;
     }
   }
 }
 
-int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[])
-{
+int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
   spdlog::set_pattern("[%H:%M:%S %z] [%n] [%^---%L---%$] [thread %t] %v");
   spdlog::set_level(spdlog::level::warn);
 
-  fingerprint_sensor sensor;
-  if (!sensor.open("/dev/ttyAMA0"))
-  {
+  carbio::fingerprint::fingerprint_sensor sensor;
+  if (!sensor.open("/dev/ttyAMA0")) {
     std::cerr << "Failed to connect to fingerprint sensor" << std::endl;
     return 1;
   }
 
-  // Initialize profile storage
-  profile_store profiles;
-  auto load_result = profiles.load_profiles();
-  if (load_result)
-  {
-    std::cout << "Loaded " << profiles.get_profile_count() << " driver profiles" << std::endl;
-  }
-  else
-  {
-    std::cout << "Warning: Failed to load profiles: " << get_message(load_result.error()) << std::endl;
-    std::cout << "Starting with empty profile database" << std::endl;
-  }
+  std::cout << "Connected to fingerprint sensor" << std::endl;
+  std::cout << "Security: Convention-based admin access (IDs 0-2 are admins)"
+            << std::endl;
 
   // Main menu loop
-  while (true)
-  {
+  while (true) {
     std::cout << "----------------" << std::endl;
 
     // Fetch and display templates
     std::array<std::uint8_t, 32> buffer;
     auto index_result = sensor.read_index_table(buffer);
-    if (index_result)
-    {
+    if (index_result) {
       std::cout << "Fingerprint templates: [";
       bool first = true;
-      // Iterate through the bitmap and extract template IDs (32 bytes = 256 templates max)
-      for (std::uint16_t i = 0; i < 32 * 8; ++i)
-      {
+      // Iterate through the bitmap and extract template IDs (32 bytes = 256
+      // templates max)
+      for (std::uint16_t i = 0; i < 32 * 8; ++i) {
         std::uint16_t byte_index = i / 8;
         std::uint8_t bit_index = i % 8;
-        if ((index_result->at(byte_index) & (1 << bit_index)) != 0)
-        {
-          if (!first) std::cout << ", ";
+        if ((index_result->at(byte_index) & (1 << bit_index)) != 0) {
+          if (!first)
+            std::cout << ", ";
           std::cout << i;
           first = false;
         }
       }
       std::cout << "]" << std::endl;
-    }
-    else
-    {
+    } else {
       std::cout << "Failed to read templates" << std::endl;
     }
 
@@ -653,158 +555,83 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[])
     std::string input;
     std::getline(std::cin, input);
 
-    if (input == "e" || input == "E")
-    {
-      // Get driver information
-      std::cout << "Enter driver name: " << std::flush;
-      std::string name;
-      std::getline(std::cin, name);
-
-      if (name.empty())
-      {
-        std::cout << "Driver name cannot be empty" << std::endl;
-        continue;
-      }
-
-      std::cout << "Admin privileges? (y/n): " << std::flush;
-      std::string admin_input;
-      std::getline(std::cin, admin_input);
-      bool isAdmin = (admin_input == "y" || admin_input == "Y");
-
+    if (input == "e" || input == "E") {
       uint16_t id = getTemplateId();
 
-      // Check if profile already exists
-      if (profiles.profile_exists(id))
-      {
-        std::cout << "Error: Profile with ID " << id << " already exists" << std::endl;
-        std::string existing_name = profiles.get_driver_name(id);
-        std::cout << "Existing driver: " << existing_name << std::endl;
-        continue;
-      }
+      std::cout << "Note: IDs 0-2 have admin privileges by convention"
+                << std::endl;
 
-      if (enrollFinger(sensor, profiles, id, name, isAdmin))
-      {
+      if (enrollFinger(sensor, id)) {
         std::cout << "Enrollment successful!" << std::endl;
-      }
-      else
-      {
+      } else {
         std::cout << "Enrollment failed" << std::endl;
       }
-    }
-    else if (input == "f" || input == "F")
-    {
+    } else if (input == "f" || input == "F") {
       auto find_result = getFingerprintDetail(sensor);
-      if (find_result)
-      {
-        std::cout << "Detected #" << find_result->index << " with confidence " << find_result->confidence << std::endl;
-      }
-      else
-      {
+      if (find_result) {
+        std::cout << "Detected #" << find_result->index << " with confidence "
+                  << find_result->confidence << std::endl;
+
+        // Check if admin (IDs 0-2 by convention)
+        if (find_result->index <= 2) {
+          std::cout << "Status: ADMIN (convention-based)" << std::endl;
+        } else {
+          std::cout << "Status: Regular user" << std::endl;
+        }
+      } else {
         std::cout << "Finger not found" << std::endl;
       }
-    }
-    else if (input == "i" || input == "I")
-    {
-      identifyFingerprint(sensor, profiles);
-    }
-    else if (input == "v" || input == "V")
-    {
+    } else if (input == "i" || input == "I") {
+      identifyFingerprint(sensor);
+    } else if (input == "v" || input == "V") {
       uint16_t id = getTemplateId();
       verifyFingerprint(sensor, id);
-    }
-    else if (input == "q" || input == "Q")
-    {
+    } else if (input == "q" || input == "Q") {
       uint16_t id = getTemplateId();
       queryTemplate(sensor, id);
-    }
-    else if (input == "d" || input == "D")
-    {
+    } else if (input == "d" || input == "D") {
       uint16_t id = getTemplateId();
-      if (sensor.erase_model(id, 1))
-      {
+      if (sensor.erase_model(id, 1)) {
         std::cout << "Fingerprint deleted from sensor" << std::endl;
-
-        // Also delete the profile
-        auto delete_result = profiles.delete_profile(id);
-        if (delete_result)
-        {
-          std::cout << "Profile deleted" << std::endl;
-        }
-        else
-        {
-          std::cout << "Warning: Profile deletion failed" << std::endl;
-        }
-      }
-      else
-      {
+      } else {
         std::cout << "Failed to delete fingerprint" << std::endl;
       }
-    }
-    else if (input == "c" || input == "C")
-    {
-      std::cout << "WARNING: This will clear all fingerprints and driver profiles!" << std::endl;
+    } else if (input == "c" || input == "C") {
+      std::cout << "WARNING: This will clear all fingerprints!" << std::endl;
       std::cout << "Type 'y' to confirm: " << std::flush;
       std::string confirm;
       std::getline(std::cin, confirm);
-      if (confirm == "y" || confirm == "Y")
-      {
+      if (confirm == "y" || confirm == "Y") {
         std::cout << "Clearing database..." << std::endl;
-        if (sensor.clear_database())
-        {
+        if (sensor.clear_database()) {
           std::cout << "All fingerprints deleted from sensor!" << std::endl;
-
-          // Also clear all profiles
-          auto clear_result = profiles.clear_all_profiles();
-          if (clear_result)
-          {
-            std::cout << "All driver profiles deleted!" << std::endl;
-          }
-          else
-          {
-            std::cout << "Warning: Profile clear failed" << std::endl;
-          }
-        }
-        else
-        {
+        } else {
           std::cout << "Failed to clear database" << std::endl;
         }
-      }
-      else
-      {
+      } else {
         std::cout << "Cancelled" << std::endl;
       }
-    }
-    else if (input == "l" || input == "L")
-    {
+    } else if (input == "l" || input == "L") {
       ledControl(sensor);
-    }
-    else if (input == "s" || input == "S")
-    {
+    } else if (input == "s" || input == "S") {
       configureSystem(sensor);
-    }
-    else if (input == "r" || input == "R")
-    {
+    } else if (input == "r" || input == "R") {
       std::cout << "Soft resetting sensor..." << std::endl;
-      if (sensor.soft_reset_device())
-      {
+      if (sensor.soft_reset_device()) {
         std::cout << "Sensor reset successfully" << std::endl;
         // Display updated parameters
         auto params = sensor.get_device_setting_info();
-        if (params)
-        {
+        if (params) {
           std::cout << "Current settings after reset:" << std::endl;
           std::cout << "  Baud Rate: " << params->baudrate << std::endl;
-          std::cout << "  Security Level: " << params->security_level << std::endl;
+          std::cout << "  Security Level: " << params->security_level
+                    << std::endl;
           std::cout << "  Packet Length: " << params->length << std::endl;
         }
-      }
-      else
-      {
+      } else {
         std::cout << "Failed to reset sensor" << std::endl;
       }
-    }
-    else if (input == "x" || input == "X")
-    {
+    } else if (input == "x" || input == "X") {
       std::cout << "Disconnecting..." << std::endl;
       sensor.close();
       break;

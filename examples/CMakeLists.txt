@@ -2,4 +2,3 @@
 add_executable(fingerprint_manager fingerprint_manager.cpp)
 target_include_directories(fingerprint_manager PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 target_link_libraries(fingerprint_manager carbio)
-target_compile_features(fingerprint_manager PRIVATE cxx_std_23)

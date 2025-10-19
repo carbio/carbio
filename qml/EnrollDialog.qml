@@ -41,35 +41,9 @@ Dialog {
                 height: 1
                 color: "#444444"
             }
-            
-            Label {
-                text: "Driver Name:"
-                font.pixelSize: 18
-                font.family: "Inter"
-                color: "#FFFFFF"
-            }
-
-            TextField {
-                id: nameInput
-                Layout.fillWidth: true
-                Layout.preferredHeight: 50
-                font.pixelSize: 20
-                font.family: "Inter"
-                color: "#FFFFFF"
-                placeholderText: "Enter driver name (e.g., Sarah, Peter)"
-
-                background: Rectangle {
-                    color: "#1E1E1E"
-                    radius: 8
-                    border.color: nameInput.activeFocus ? "#01E4E0" : "#444444"
-                    border.width: 2
-
-                    Behavior on border.color { ColorAnimation { duration: 200 } }
-                }
-            }
 
             Label {
-                text: "Fingerprint ID (1-127):"
+                text: "Fingerprint ID (0-127, admin: 0-2):"
                 font.pixelSize: 18
                 font.family: "Inter"
                 color: "#FFFFFF"
@@ -85,7 +59,7 @@ Dialog {
                 horizontalAlignment: Text.AlignHCenter
                 color: "#FFFFFF"
                 placeholderText: "ID"
-                validator: IntValidator { bottom: 1; top: 127 }
+                validator: IntValidator { bottom: 0; top: 127 }
 
                 background: Rectangle {
                     color: "#1E1E1E"
@@ -102,61 +76,21 @@ Dialog {
 
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 50
-                color: "transparent"
+                Layout.preferredHeight: 60
+                color: "#1E1E1E"
+                radius: 8
+                border.color: "#444444"
+                border.width: 1
 
-                RowLayout {
+                Label {
                     anchors.fill: parent
-                    spacing: 15
-
-                    Rectangle {
-                        Layout.preferredWidth: 30
-                        Layout.preferredHeight: 30
-                        radius: 6
-                        color: adminCheckbox.checked ? "#01E4E0" : "#1E1E1E"
-                        border.color: adminCheckbox.checked ? "#00FFEE" : "#444444"
-                        border.width: 2
-
-                        Behavior on color { ColorAnimation { duration: 200 } }
-
-                        Canvas {
-                            id: checkmark
-                            anchors.fill: parent
-                            visible: adminCheckbox.checked
-                            onPaint: {
-                                var ctx = getContext("2d")
-                                ctx.strokeStyle = "#1E1E1E"
-                                ctx.lineWidth = 3
-                                ctx.lineCap = "round"
-                                ctx.lineJoin = "round"
-
-                                ctx.beginPath()
-                                ctx.moveTo(8, 15)
-                                ctx.lineTo(12, 19)
-                                ctx.lineTo(22, 9)
-                                ctx.stroke()
-                            }
-                        }
-
-                        MouseArea {
-                            id: adminCheckbox
-                            anchors.fill: parent
-                            property bool checked: false
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                checked = !checked
-                                checkmark.requestPaint()
-                            }
-                        }
-                    }
-
-                    Label {
-                        text: "Admin Privileges (IDs 0-2 recommended)"
-                        font.pixelSize: 16
-                        font.family: "Inter"
-                        color: "#FFFFFF"
-                        Layout.fillWidth: true
-                    }
+                    anchors.margins: 15
+                    text: "Note: Admin privileges are automatically assigned to IDs 0-2 by convention (zero-configuration security)."
+                    font.pixelSize: 14
+                    font.family: "Inter"
+                    color: "#AAAAAA"
+                    wrapMode: Text.WordWrap
+                    verticalAlignment: Text.AlignVCenter
                 }
             }
             
@@ -274,9 +208,7 @@ Dialog {
                     }
 
                     onClicked: {
-                        nameInput.text = ""
                         idInput.text = ""
-                        adminCheckbox.checked = false
                         enrollDialog.close()
                     }
                 }
@@ -286,9 +218,8 @@ Dialog {
                     Layout.preferredHeight: 50
                     text: "Start Enroll"
                     enabled: !controller.isProcessing &&
-                             nameInput.text.trim().length > 0 &&
                              idInput.text.length > 0 &&
-                             parseInt(idInput.text) >= 1 &&
+                             parseInt(idInput.text) >= 0 &&
                              parseInt(idInput.text) <= 127
                     
                     contentItem: Label {
@@ -326,9 +257,7 @@ Dialog {
         function onOperationComplete(message) {
             // Close dialog on successful enrollment
             if (enrollDialog.visible && message.includes("enrolled successfully")) {
-                nameInput.text = ""
                 idInput.text = ""
-                adminCheckbox.checked = false
                 enrollDialog.close()
             }
         }
@@ -338,21 +267,17 @@ Dialog {
     }
 
     function startEnroll() {
-        var name = nameInput.text.trim()
         var id = parseInt(idInput.text)
-        var isAdmin = adminCheckbox.checked
 
-        if (name.length > 0 && id >= 1 && id <= 127) {
-            console.log("Enrolling driver:", name, "ID:", id, "Admin:", isAdmin)
-            controller.enrollDriverWithFingerprint(name, id, isAdmin)
+        if (id >= 0 && id <= 127) {
+            console.log("Enrolling fingerprint at ID:", id, "(Admin:", id <= 2, ")")
+            controller.enrollFingerprint(id)
             // Dialog stays open to show progress
         }
     }
 
     onOpened: {
-        nameInput.forceActiveFocus()
-        nameInput.text = ""
+        idInput.forceActiveFocus()
         idInput.text = ""
-        adminCheckbox.checked = false
     }
 }

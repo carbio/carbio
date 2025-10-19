@@ -31,7 +31,6 @@ Rectangle {
     property int failedAttempts: 0
     property int lockoutSeconds: 0
     property int maxLockoutSeconds: 20
-    property string driverName: ""
     property bool isProcessing: false
     property int scanProgress: 0  // 0-100
 
@@ -172,10 +171,8 @@ Rectangle {
     }
 
     // Functions to trigger animations
-    function showSuccess(name) {
-        driverName = name
+    function showSuccess() {
         feedbackOverlay.feedbackType = "success"
-        feedbackOverlay.driverName = name
         feedbackOverlay.show()
     }
 
