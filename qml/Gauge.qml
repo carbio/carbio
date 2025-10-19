@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import Qt5Compat.GraphicalEffects
 
 Item {
     id: gauge
@@ -188,6 +187,22 @@ Item {
                 }
             }
             
+            // Outer glow layers for depth
+            Repeater {
+                model: 3
+                Rectangle {
+                    x: -3 - index * 1.5
+                    y: -background.height * 0.35 - index * 1.5
+                    width: 6 + index * 3
+                    height: background.height * 0.27 + index * 3
+                    color: "white"
+                    radius: 3 + index
+                    opacity: 0.15 - index * 0.04
+                    antialiasing: true
+                }
+            }
+
+            // Main needle
             Rectangle {
                 id: needle
                 x: -2
@@ -197,14 +212,6 @@ Item {
                 color: "white"
                 radius: 2
                 antialiasing: true
-            }
-            
-            Glow {
-                anchors.fill: needle
-                radius: 5
-                samples: 10
-                color: "white"
-                source: needle
             }
         }
         

@@ -6,36 +6,29 @@ Item {
     id: authProgress
 
     // Props
-    property int currentStage: 0         // 0=capture, 1=template, 2=search
-    property real stageProgress: 0.0     // 0.0 to 1.0
     property bool isProcessing: true
+    property int scanProgress: 0  // 0-100 from controller
 
     // Dimensions
     width: 280
     height: 400
 
-    // Readonly computed
-    readonly property real totalProgress: (currentStage + stageProgress) / 3.0
-
-    // Simulate processing stages (real progress would come from controller signals)
-    Timer {
-        running: isProcessing
-        interval: 50
-        repeat: true
-        onTriggered: {
-            // Simulate progress through 3 stages
-            authProgress.stageProgress += 0.05
-            if (authProgress.stageProgress >= 1.0) {
-                authProgress.stageProgress = 0
-                authProgress.currentStage = (authProgress.currentStage + 1) % 3
-            }
-        }
+    // Readonly computed - convert 0-100 to 0.0-1.0
+    readonly property real totalProgress: scanProgress / 100.0
+    readonly property int currentStage: {
+        if (scanProgress < 33) return 0      // Capturing
+        else if (scanProgress < 66) return 1 // Processing
+        else return 2                         // Verifying
+    }
+    readonly property real stageProgress: {
+        if (scanProgress < 33) return (scanProgress / 33.0)
+        else if (scanProgress < 66) return ((scanProgress - 33) / 33.0)
+        else return ((scanProgress - 66) / 34.0)
     }
 
     onIsProcessingChanged: {
-        if (isProcessing) {
-            currentStage = 0
-            stageProgress = 0
+        if (!isProcessing) {
+            // Progress will be reset by controller
         }
     }
 

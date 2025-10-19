@@ -3,9 +3,9 @@ include_guard(GLOBAL)
 # Specify search paths, i.e. let Cmake know where Conan places its third party stuff
 set(USER_HOME_DIR "$ENV{HOME}")
 list(APPEND CMAKE_PREFIX_PATH "${USER_HOME_DIR}/Qt/6.7.3/gcc_arm64")
-#list(APPEND CMAKE_PREFIX_PATH "${CMAKE_SOURCE_DIR}/build/generators")
+list(APPEND CMAKE_PREFIX_PATH "${CMAKE_SOURCE_DIR}/build/generators")
 list(APPEND CMAKE_MODULE_PATH "${USER_HOME_DIR}/Qt/6.7.3/gcc_arm64")
-#list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/build/generators")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/build/generators")
 message(STATUS "CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
 message(STATUS "CMAKE_MODULE_PATH: ${CMAKE_MODULE_PATH}")
 # Specify build paths, i.e. specify binary output

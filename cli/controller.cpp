@@ -1,99 +1,147 @@
-#include "controller.h"
+/**********************************************************************
+ * Project   : Vehicle access control through biometric
+ *             authentication
+ * Author    : Rajmund Kail
+ * Institute : Óbuda University
+ * Faculty   : John von Neumann Faculty of Informatics
+ * Dept.     : Computer Science Engineering
+ * Year      : 2025
+ *
+ * License:
+ *   Permission is hereby granted, free of charge, to any person
+ *   obtaining a copy of this software and associated documentation
+ *   files (the "Software"), to deal in the Software without
+ *   restriction, including without limitation the rights to use,
+ *   copy, modify, merge, publish, distribute, sublicense, and/or
+ *   sell copies of the Software, subject to the following
+ *   conditions:
+ *
+ *   The above copyright notice and this permission notice shall
+ *   be included in all copies or substantial portions of the
+ *   Software.
+ *
+ * Disclaimer:
+ *   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
+ *   KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+ *   WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+ *   PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS
+ *   OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ *   OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+ *   OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+ *   SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ *********************************************************************/
 
+#include "carbio/fingerprint/fingerprint_sensor.h"
+
+#include "controller.h"
+#include "sensor_worker.h"
 #include <QDebug>
 #include <QThread>
+
 #include <cstdlib>
 
 Controller::Controller(QObject *parent)
-  : QObject(parent)
-  , m_sensor(nullptr)
-  , m_authState(AuthState::OFF)
-  , m_driverName("")
-  , m_failedAttempts(0)
-  , m_lockoutSeconds(0)
-  , m_sensorAvailable(false)
-  , m_isProcessing(false)
-  , m_templateCount(0)
-  , m_operationProgress("")
-  , m_manualLedControl(false)
-  , m_isAdminMenuAccessible(false)
-  , m_adminAccessToken("")
-  , m_scanTimer(new QTimer(this))
-  , m_lockoutTimer(new QTimer(this))
-  , m_adminFingerprintTimer(new QTimer(this))
-  , m_consecutiveNoFingerAuth(0)
-  , m_consecutiveNoFingerAdmin(0)
-  , m_adminAuth(std::make_unique<carbio::security::AdminAuthenticator>(this))
-  , m_sessionManager(std::make_unique<carbio::security::SessionManager>(this))
-  , m_auditLogger(std::make_unique<carbio::security::AuditLogger>(this))
-  , m_adminAuthPhase(AdminAuthPhase::IDLE)
-{
-  // Setup adaptive scanning timer - starts at 50ms, scales to 1000ms for power efficiency
-  m_scanTimer->setInterval(POLL_INTERVAL_MIN);
-  connect(m_scanTimer, &QTimer::timeout, this, &Controller::performAuthentication);
+    : QObject(parent),
+      m_sensor(std::make_unique<carbio::fingerprint::fingerprint_sensor>()),
+      m_authState(AuthState::Off), m_failedAttempts(0),
+      m_lockoutSeconds(0), m_sensorAvailable(false), m_isProcessing(false),
+      m_templateCount(0), m_operationProgress(""),
+      m_isAdminMenuAccessible(false), m_scanProgress(0),
+      m_lockoutTimer(new QTimer(this)), m_sensorThread(new QThread(this)),
+      m_sensorWorker(new SensorWorker(m_sensor.get())) {
+  // Move worker to thread
+  m_sensorWorker->moveToThread(m_sensorThread);
 
-  // Setup lockout countdown timer (1 second ticks)
+  // Qt pattern: deleteLater() ensures cleanup happens in correct thread's event
+  // loop
+  connect(m_sensorThread, &QThread::finished, m_sensorWorker,
+          &QObject::deleteLater);
+
+  // Connect authentication signals
+  connect(m_sensorWorker, &SensorWorker::authenticationSuccess, this,
+          &Controller::onAuthenticationSuccess);
+  connect(m_sensorWorker, &SensorWorker::authenticationFailed, this,
+          &Controller::onAuthenticationFailed);
+  connect(m_sensorWorker, &SensorWorker::authenticationNoFinger, this,
+          &Controller::onAuthenticationNoFinger);
+
+  // Connect admin authentication signals
+  connect(m_sensorWorker, &SensorWorker::adminFingerprintSuccess, this,
+          &Controller::onAdminFingerprintSuccess);
+  connect(m_sensorWorker, &SensorWorker::adminFingerprintFailed, this,
+          &Controller::onAdminFingerprintFailed);
+  connect(m_sensorWorker, &SensorWorker::adminFingerprintNoFinger, this,
+          &Controller::onAdminFingerprintNoFinger);
+
+  // Connect enrollment signals
+  connect(m_sensorWorker, &SensorWorker::enrollmentProgress, this,
+          &Controller::setOperationProgress);
+  connect(m_sensorWorker, &SensorWorker::enrollmentComplete, this,
+          &Controller::onEnrollmentComplete);
+  connect(m_sensorWorker, &SensorWorker::enrollmentFailed, this,
+          &Controller::onEnrollmentFailed);
+
+  // Connect operation signals
+  connect(m_sensorWorker, &SensorWorker::operationComplete, this,
+          &Controller::onOperationComplete);
+  connect(m_sensorWorker, &SensorWorker::operationFailed, this,
+          &Controller::onOperationFailed);
+  connect(m_sensorWorker, &SensorWorker::progressUpdate, this,
+          &Controller::setOperationProgress);
+  connect(m_sensorWorker, &SensorWorker::templateCountUpdated, this,
+          &Controller::setTemplateCount);
+  connect(m_sensorWorker, &SensorWorker::scanProgressUpdate, this,
+          &Controller::setScanProgress);
+
+  // Start the worker thread
+  m_sensorThread->start();
+
+  // Setup lockout countdown timer (still on main thread for UI updates)
   m_lockoutTimer->setInterval(1000);
   connect(m_lockoutTimer, &QTimer::timeout, this, &Controller::onLockoutTick);
 
-  // Setup admin fingerprint polling timer with adaptive interval
-  m_adminFingerprintTimer->setInterval(POLL_INTERVAL_MIN);
-  connect(m_adminFingerprintTimer, &QTimer::timeout, this, &Controller::onAdminFingerprintPoll);
-
-  // Connect admin auth signals
-  connect(m_adminAuth.get(), &carbio::security::AdminAuthenticator::passwordVerified, this, &Controller::adminPasswordVerified);
-  connect(m_adminAuth.get(), &carbio::security::AdminAuthenticator::passwordFailed, this, &Controller::adminPasswordFailed);
-  connect(m_auditLogger.get(), &carbio::security::AuditLogger::unauthorizedAccessDetected, this, &Controller::unauthorizedAccessDetected);
-
-  qDebug() << "Controller initialized with security components";
+  // qDebug() << "Controller initialized with worker thread";
 }
 
-Controller::~Controller()
-{
-  if (m_sensor)
-  {
-    m_sensor->end();
-  }
+Controller::~Controller() {
+  m_sensorThread->quit();
+  m_sensorThread->wait();
+  // qDebug() << "Controller destroyed - worker thread stopped";
 }
 
-bool Controller::initializeSensor()
-{
-  try
-  {
-    qDebug() << "Attempting to initialize fingerprint sensor...";
+bool Controller::initializeSensor() {
+  try {
+    // qDebug() << "Attempting to initialize fingerprint sensor...";
 
     // Check for environment variable to override serial port
-    const char* portEnv = std::getenv("FINGERPRINT_PORT");
-    const char* port = portEnv ? portEnv : "/dev/ttyAMA0";
+    const char *portEnv = std::getenv("FINGERPRINT_PORT");
+    const char *port = portEnv ? portEnv : "/dev/ttyAMA0";
 
-    qInfo() << "Using serial port:" << port;
-    m_sensor = std::make_unique<carbio::FingerprintSensor>(port);
-    if (nullptr != m_sensor && m_sensor->begin())
-    {
+    // qInfo() << "Using serial port:" << port;
+    if (m_sensor->open(port)) {
       m_sensorAvailable = true;
       emit sensorAvailableChanged();
+
+      // Pre-warm device settings cache for instant first auth
+      QMetaObject::invokeMethod(m_sensorWorker, "prewarmCache",
+                                Qt::QueuedConnection);
+
       refreshTemplateCount();
-      qInfo() << "Starting authentication scanning";
+      // qInfo() << "Starting authentication scanning";
       startAuthentication();
       return true;
-    }
-    else
-    {
-      qWarning() << "Failed to initialize sensor - running in demo mode";
+    } else {
+      // qWarning() << "Failed to initialize sensor - running in demo mode";
       m_sensorAvailable = false;
       emit sensorAvailableChanged();
       return false;
     }
-  }
-  catch (std::exception const &e)
-  {
+  } catch (std::exception const &e) {
     qCritical() << "Sensor initialization exception:" << e.what();
     m_sensorAvailable = false;
     emit sensorAvailableChanged();
     return false;
-  }
-  catch (...)
-  {
+  } catch (...) {
     qCritical() << "Unknown exception during sensor initialization";
     m_sensorAvailable = false;
     emit sensorAvailableChanged();
@@ -101,1238 +149,584 @@ bool Controller::initializeSensor()
   }
 }
 
-void Controller::startAuthentication()
-{
-  if (!m_sensorAvailable || !m_sensor)
-  {
-    qWarning() << "Sensor not available";
+void Controller::startAuthentication() {
+  if (!m_sensorAvailable) {
+    // qWarning() << "Sensor not available";
     return;
   }
 
-  if (m_authState == AuthState::ALERT)
-  {
-    qWarning() << "System locked out";
+  if (m_authState == AuthState::Alert) {
+    // qWarning() << "System locked out";
     return;
   }
 
-  setAuthState(AuthState::SCANNING);
+  // qInfo() << "Starting authentication polling";
+  setAuthState(AuthState::Scanning);
 
-  // Turn on LED to indicate scanning mode
-  if (m_sensor->turnLedOn() != carbio::StatusCode::Success)
-  {
-    qWarning() << "Failed to turn on LED";
-  }
+  enableSensorAutoFingerDetection();
 
-  // Reset adaptive polling to responsive mode
-  resetAuthPollingInterval();
-
-  // Start adaptive scanning
-  m_scanTimer->start();
+  // Start authentication polling at normal interval (5ms = 200 Hz)
+  QMetaObject::invokeMethod(m_sensorWorker, "startAuthenticationPolling",
+                            Qt::QueuedConnection,
+                            Q_ARG(int, POLL_INTERVAL_NORMAL));
 }
 
-void Controller::cancelAuthentication()
-{
-  m_scanTimer->stop();
+void Controller::onAuthenticationSuccess(int fingerId, int /* confidence */) {
+  setScanProgress(100);
 
-  // Reset polling interval for next time authentication starts
-  resetAuthPollingInterval();
-
-  if (m_sensor && !m_manualLedControl)
-  {
-    if (m_sensor->turnLedOff() != carbio::StatusCode::Success)
-    {
-      qWarning() << "Failed to turn off LED";
-    }
-  }
-
-  setAuthState(AuthState::OFF);
-}
-
-void Controller::resetLockout()
-{
-  m_lockoutTimer->stop();
-  m_lockoutSeconds  = 0;
-  m_failedAttempts = 0;
-  emit lockoutSecondsChanged();
-  emit failedAttemptsChanged();
-
-  if (m_sensor)
-  {
-    // Turn on LED to indicate ready state
-    if (m_sensor->turnLedOn() != carbio::StatusCode::Success)
-    {
-      qWarning() << "Failed to turn on LED";
-    }
-  }
-
-  setAuthState(AuthState::SCANNING);
-
-  // Reset adaptive polling to responsive mode
-  resetAuthPollingInterval();
-
-  m_scanTimer->start();
-}
-
-void Controller::performAuthentication()
-{
-  if (!m_sensor || m_authState != AuthState::SCANNING)
-  {
-    return;
-  }
-
-  // Step 1: Check if finger is present (non-blocking)
-  carbio::StatusCode status = m_sensor->captureImage();
-
-  // If no finger, implement adaptive polling with exponential backoff
-  if (status == carbio::StatusCode::NoFinger)
-  {
-    m_consecutiveNoFingerAuth++;
-
-    // Adjust polling interval exponentially to save CPU/power
-    adjustAuthPollingInterval();
-
-    return;
-  }
-
-  // Finger detected! Reset adaptive polling and start authentication
-  resetAuthPollingInterval();
-
-  // Stop polling and start authentication
-  // Use QTimer::singleShot to prevent race condition
-  if (m_scanTimer->isActive())
-  {
-    m_scanTimer->stop();
-  }
-
-  setIsProcessing(true);
-  setAuthState(AuthState::AUTHENTICATING);
-
-  if (status != carbio::StatusCode::Success)
-  {
-    qWarning() << "Failed to capture image:" << static_cast<int>(status);
-    handleAuthenticationFailure();
-    return;
-  }
-
-  qInfo() << "Image captured successfully";
-
-  // Step 2: Convert image to template
-  status = m_sensor->imageToTemplate(1);
-  if (status != carbio::StatusCode::Success)
-  {
-    qWarning() << "Failed to create template:" << static_cast<int>(status);
-    handleAuthenticationFailure();
-    return;
-  }
-
-  qInfo() << "Template created successfully";
-
-  // Step 3: Search for match
-  auto result = m_sensor->fastSearch();
-  if (!result)
-  {
-    qWarning() << "Fingerprint not found in database";
-    handleAuthenticationFailure();
-    return;
-  }
-
-  // Success!
-  qInfo() << "Authentication successful. Finger ID:" << result->fingerId << "Confidence:" << result->confidence;
-
-  m_scanTimer->stop();
   m_failedAttempts = 0;
   emit failedAttemptsChanged();
 
-  m_driverName = lookupDriverName(result->fingerId);
-  emit driverNameChanged();
+  // qInfo() << "Authentication successful - transitioning to authenticated
+  // state";
+  disableSensorAutoFingerDetection();
 
-  // Turn off LED on success (dashboard is now visible)
-  if (m_sensor->turnLedOff() != carbio::StatusCode::Success)
-  {
-    qWarning() << "Failed to turn off LED";
-  }
+  // Stop authentication polling - user is now authenticated
+  QMetaObject::invokeMethod(m_sensorWorker, "stopAuthenticationPolling",
+                            Qt::QueuedConnection);
 
-  setIsProcessing(false);
-  emit authenticationSuccess(m_driverName);
-  setAuthState(AuthState::ON);
+  setOperationProgress(QString("Authentication successful! Finger ID: %1").arg(fingerId));
+  emit authenticationSuccess();
+  setAuthState(AuthState::On);
 }
 
-void Controller::handleAuthenticationFailure()
-{
+void Controller::onAuthenticationFailed() { handleAuthenticationFailure(); }
+
+void Controller::onAuthenticationNoFinger() {
+  // No longer needed - worker thread handles polling silently
+  // This signal is only emitted on errors now
+  setScanProgress(0);
+}
+
+void Controller::onAdminFingerprintSuccess(int fingerId, int confidence) {
+  // qInfo() << "Fingerprint matched - index: " << fingerId << ", confidence:"
+  // << confidence;
+
+  // Stop worker thread polling
+  QMetaObject::invokeMethod(m_sensorWorker, "stopAdminPolling",
+                            Qt::QueuedConnection);
+
+  // Check if fingerprint is admin (ID 0-2 by convention)
+  if (!isAdminFingerprint(fingerId)) {
+    // qWarning() << "Non-admin fingerprint (index: " << fingerId << ")
+    // attempted admin access";
+
+    setIsProcessing(false);
+    lockDashboardAfterAdminFailure();
+
+    emit unauthorizedAccessDetected(
+        QString("WARNING: User ID %1 attempted unauthorized admin access.")
+            .arg(fingerId));
+    emit adminAccessDenied("Insufficient privileges");
+    return;
+  }
+
+  // Check confidence threshold
+  if (confidence < carbio::security::MIN_ADMIN_CONFIDENCE) {
+    // qWarning() << "Too low confidence (confidence:" << confidence << ")";
+
+    setIsProcessing(false);
+    lockDashboardAfterAdminFailure();
+    emit adminAccessDenied(
+        QString("Too low confidence (%1). Try again.").arg(confidence));
+    return;
+  }
+
+  // Grant admin access
   setIsProcessing(false);
+  setAdminMenuAccessible(true);
+
+  // qInfo() << "Admin access granted to fingerprint index:" << fingerId;
+  emit adminAccessGranted();
+}
+
+void Controller::onAdminFingerprintFailed(QString reason) {
+  // qWarning() << "Admin fingerprint verification failed:" << reason;
+
+  // Stop worker thread polling
+  QMetaObject::invokeMethod(m_sensorWorker, "stopAdminPolling",
+                            Qt::QueuedConnection);
+
+  setIsProcessing(false);
+  lockDashboardAfterAdminFailure();
+
+  emit adminAccessDenied(reason);
+}
+
+void Controller::onAdminFingerprintNoFinger() {
+  // No longer needed - worker thread handles polling silently
+}
+
+void Controller::onEnrollmentComplete(QString message) {
+  setIsProcessing(false);
+  QMetaObject::invokeMethod(m_sensorWorker, &SensorWorker::refreshTemplateCount,
+                            Qt::QueuedConnection);
+  emit operationComplete(message);
+}
+
+void Controller::onEnrollmentFailed(QString error) {
+  setIsProcessing(false);
+  emit operationFailed(error);
+}
+
+void Controller::onOperationComplete(QString message) {
+  setIsProcessing(false);
+  emit operationComplete(message);
+}
+
+void Controller::onOperationFailed(QString error) {
+  setIsProcessing(false);
+  emit operationFailed(error);
+}
+
+void Controller::handleAuthenticationFailure() {
   m_failedAttempts++;
   emit failedAttemptsChanged();
 
-  if (m_failedAttempts >= MAX_ATTEMPTS)
-  {
-    // Trigger lockout - stop polling to save CPU/power
-    m_scanTimer->stop();
+  if (m_failedAttempts >= MAX_ATTEMPTS) {
+    // qWarning() << "Max authentication attempts reached - initiating lockout";
+
+    // Stop worker thread polling
+    QMetaObject::invokeMethod(m_sensorWorker, "stopAuthenticationPolling",
+                              Qt::QueuedConnection);
 
     m_lockoutSeconds = LOCKOUT_DURATION_SEC;
     emit lockoutSecondsChanged();
-    setAuthState(AuthState::ALERT);
+    setAuthState(AuthState::Alert);
     m_lockoutTimer->start();
 
-    // Keep LED on during lockout as warning
-    if (m_sensor->turnLedOn() != carbio::StatusCode::Success)
-    {
-      qWarning() << "Failed to turn on LED";
-    }
+    disableSensorAutoFingerDetection();
+    QMetaObject::invokeMethod(m_sensorWorker, &SensorWorker::turnLedOn,
+                              Qt::QueuedConnection);
 
     emit lockoutTriggered();
-  }
-  else
-  {
+  } else {
+    // qDebug() << "Authentication failed - activating BURST MODE (1ms polling
+    // for instant retry)";
     emit authenticationFailed();
+    setAuthState(AuthState::Scanning);
 
-    // Brief LED blink to indicate failure, then return to scanning mode
-    if (m_sensor->turnLedOff() != carbio::StatusCode::Success)
-    {
-      qWarning() << "Failed to turn off LED";
-    }
-    QThread::msleep(200);
-    if (m_sensor->turnLedOn() != carbio::StatusCode::Success)
-    {
-      qWarning() << "Failed to turn on LED";
-    }
+    // ADAPTIVE POLLING STRATEGY:
+    // After failure, user is likely retrying immediately with adjusted finger
+    // position Phase 1 (BURST): 1ms polling for 2 seconds - catch instant retry
+    // attempts Phase 2 (FAST):  3ms polling thereafter - maintain
+    // responsiveness
+    //
+    // CAVEAT: This bypasses multi-phase AFD's gradual escalation
+    // Rationale: User already engaged (finger was detected), optimize for retry
+    // speed
 
-    // Return to scanning mode and restart polling with reset interval
-    setAuthState(AuthState::SCANNING);
-    resetAuthPollingInterval();
-    m_scanTimer->start();
+    // Activate burst mode as user likely retrying immediately
+    QMetaObject::invokeMethod(m_sensorWorker, "startAuthenticationPolling",
+                              Qt::QueuedConnection,
+                              Q_ARG(int, POLL_INTERVAL_ULTRA));
+
+    // Drop back to fast polling after 2 seconds
+    QTimer::singleShot(2000, this, [this]() {
+      if (m_authState == AuthState::Scanning) {
+        // qDebug() << "Burst mode timeout - returning to fast polling";
+        QMetaObject::invokeMethod(m_sensorWorker, "startAuthenticationPolling",
+                                  Qt::QueuedConnection,
+                                  Q_ARG(int, POLL_INTERVAL_FAST));
+      }
+    });
   }
 }
 
-QString Controller::lookupDriverName(uint16_t fingerId)
-{
-  // In production, this would query a database
-  // For now, simple mapping
-  switch (fingerId)
-  {
-  case 0:
-    return "Sarah";
-  case 1:
-    return "Peter";
-  case 2:
-    return "Maria";
-  default:
-    return "Driver " + QString::number(fingerId);
-  }
-}
+// No longer needed - removed
 
-void Controller::setAuthState(AuthState state)
-{
-  if (m_authState != state)
-  {
-    AuthState previousState = m_authState;
+void Controller::setAuthState(AuthState state) {
+  if (m_authState != state) {
     m_authState = state;
-    qDebug() << "Auth state changed to:" << authStateToString(state).data();
-    emit authStateChanged();
-    
-    if (state == AuthState::SCANNING && previousState == AuthState::ON && m_failedAttempts > 0)
-    {
-      qInfo() << "Resetting failed attempts from" << m_failedAttempts << "to 0 (entering SCANNING from ON)";
-      m_failedAttempts = 0;
-      emit failedAttemptsChanged();
+    if (state != AuthState::Authenticating) {
+      // qDebug() << "Auth state changed to:" <<
+      // name(state).data();
     }
+    emit authStateChanged();
   }
 }
 
-void Controller::setIsProcessing(bool processing)
-{
-  if (m_isProcessing != processing)
-  {
+void Controller::setIsProcessing(bool processing) {
+  if (m_isProcessing != processing) {
     m_isProcessing = processing;
-    qDebug() << "Processing state changed to:" << (processing ? "true" : "false");
+    // qDebug() << "Processing state changed to:" << (processing ? "true" :
+    // "false");
     emit isProcessingChanged();
   }
 }
 
-void Controller::setTemplateCount(int count)
-{
-  if (m_templateCount != count)
-  {
+void Controller::setTemplateCount(int count) {
+  if (m_templateCount != count) {
     m_templateCount = count;
-    qDebug() << "Template count:" << count;
+    // qDebug() << "Template count:" << count;
     emit templateCountChanged();
   }
 }
 
-void Controller::setOperationProgress(const QString &progress)
-{
-  if (m_operationProgress != progress)
-  {
+void Controller::setOperationProgress(const QString &progress) {
+  if (m_operationProgress != progress) {
     m_operationProgress = progress;
     emit operationProgressChanged();
-    emit operationComplete(progress);
   }
 }
 
-void Controller::resetSensorState()
-{
-  if (!m_sensor)
-  {
-    return;
-  }
-
-  qDebug() << "Resetting sensor state";
-  // Try to clear any pending operations
-  static_cast<void>(m_sensor->captureImage()); // Clear image buffer
-}
-
-void Controller::refreshTemplateCount()
-{
-  if (!m_sensor || !m_sensorAvailable)
-  {
+void Controller::refreshTemplateCount() {
+  if (!m_sensorAvailable) {
     setTemplateCount(0);
     return;
   }
 
-  auto templates = m_sensor->fetchTemplates();
-  if (templates)
-  {
-    setTemplateCount(static_cast<int>(templates->size()));
-  }
-  else
-  {
-    setTemplateCount(0);
-  }
+  // Call worker to refresh template count (non-blocking)
+  QMetaObject::invokeMethod(m_sensorWorker, &SensorWorker::refreshTemplateCount,
+                            Qt::QueuedConnection);
 }
 
-void Controller::onLockoutTick()
-{
-  if (m_lockoutSeconds > 0)
-  {
+void Controller::onLockoutTick() {
+  if (m_lockoutSeconds > 0) {
     m_lockoutSeconds--;
     emit lockoutSecondsChanged();
 
-    if (m_lockoutSeconds <= 0)
-    {
+    if (m_lockoutSeconds <= 0) {
       m_lockoutTimer->stop();
-      
-      qInfo() << "Lockout expired. Resetting failed attempts from" << m_failedAttempts << "to 0";
 
+      // qInfo() << "Lockout expired - resetting failed attempts and returning
+      // to standby";
       m_failedAttempts = 0;
       emit failedAttemptsChanged();
-      
-      qInfo() << "Failed attempts reset complete. Value is now:" << m_failedAttempts;
 
-      if (m_sensor)
-      {
-        // Turn off LED when lockout expires
-        if (m_sensor->turnLedOff() != carbio::StatusCode::Success)
-        {
-          qWarning() << "Failed to turn off LED";
-        }
-      }
-
-      // Now transition to SCANNING state with reset polling
-      setAuthState(AuthState::SCANNING);
-      resetAuthPollingInterval();
+      setAuthState(AuthState::Scanning);
       startAuthentication();
     }
   }
 }
 
-void Controller::enrollFingerprint(int id)
-{
-  // Validate sensor availability
-  if (!m_sensor || !m_sensorAvailable)
-  {
+void Controller::findFingerprint() {
+  if (!m_sensorAvailable) {
     emit operationFailed("Sensor not available");
     return;
   }
 
-  // Validate that authentication is not running
-  if (m_scanTimer->isActive())
-  {
-    emit operationFailed("Cannot enroll while authentication is active. Close settings first.");
-    return;
-  }
-
-  // Validate ID range
-  if (id < 1 || id > 127)
-  {
-    emit operationFailed("Invalid ID. Must be between 1 and 127.");
-    return;
-  }
-
-  qDebug() << "Enrolling fingerprint for ID:" << id;
+  // qDebug() << "Finding fingerprint";
   setIsProcessing(true);
-  resetSensorState();
-
-  // Step 1: Capture first image
-  setOperationProgress("Place finger on sensor...");
-
-  carbio::StatusCode status = m_sensor->captureImage();
-  if (status != carbio::StatusCode::Success)
-  {
-    resetSensorState();
-    setIsProcessing(false);
-    emit operationFailed("Failed to capture first image");
-    return;
-  }
-
-  status = m_sensor->imageToTemplate(1);
-  if (status != carbio::StatusCode::Success)
-  {
-    resetSensorState();
-    setIsProcessing(false);
-    emit operationFailed("Failed to create first template");
-    return;
-  }
-
-  setOperationProgress("Remove finger...");
-  QThread::msleep(500);
-
-  // Step 2: Capture second image
-  setOperationProgress("Place same finger again...");
-
-  status = m_sensor->captureImage();
-  if (status != carbio::StatusCode::Success)
-  {
-    resetSensorState();
-    setIsProcessing(false);
-    emit operationFailed("Failed to capture second image");
-    return;
-  }
-
-  status = m_sensor->imageToTemplate(2);
-  if (status != carbio::StatusCode::Success)
-  {
-    resetSensorState();
-    setIsProcessing(false);
-    emit operationFailed("Failed to create second template");
-    return;
-  }
-
-  // Step 3: Create model from both templates
-  setOperationProgress("Creating fingerprint model...");
-  status = m_sensor->createModel();
-  if (status != carbio::StatusCode::Success)
-  {
-    resetSensorState();
-    setIsProcessing(false);
-    emit operationFailed("Failed to create fingerprint model");
-    return;
-  }
-
-  // Step 4: Store in database
-  setOperationProgress("Storing template...");
-  status = m_sensor->storeTemplate(static_cast<uint16_t>(id));
-  if (status != carbio::StatusCode::Success)
-  {
-    resetSensorState();
-    setIsProcessing(false);
-    emit operationFailed("Failed to store template");
-    return;
-  }
-
-  setIsProcessing(false);
-  refreshTemplateCount();
-  emit operationComplete("Fingerprint enrolled successfully as ID #" + QString::number(id));
+  QMetaObject::invokeMethod(m_sensorWorker, &SensorWorker::findFingerprint,
+                            Qt::QueuedConnection);
 }
 
-void Controller::findFingerprint()
-{
-  if (!m_sensor || !m_sensorAvailable)
-  {
+void Controller::identifyFingerprint() {
+  if (!m_sensorAvailable) {
     emit operationFailed("Sensor not available");
     return;
   }
 
-  qDebug() << "Finding fingerprint";
+  // qDebug() << "Identifying fingerprint";
   setIsProcessing(true);
-
-  emit operationComplete("Place finger on sensor...");
-
-  carbio::StatusCode status = m_sensor->captureImage();
-  if (status != carbio::StatusCode::Success)
-  {
-    setIsProcessing(false);
-    emit operationFailed("Failed to capture image");
-    return;
-  }
-
-  status = m_sensor->imageToTemplate(1);
-  if (status != carbio::StatusCode::Success)
-  {
-    setIsProcessing(false);
-    emit operationFailed("Failed to create template");
-    return;
-  }
-
-  auto result = m_sensor->search(1, 0, 0);
-  if (!result)
-  {
-    setIsProcessing(false);
-    emit operationFailed("Fingerprint not found in database");
-    return;
-  }
-
-  setIsProcessing(false);
-  emit operationComplete("Found: ID #" + QString::number(result->fingerId) +
-                        " (Confidence: " + QString::number(result->confidence) + ")");
+  QMetaObject::invokeMethod(m_sensorWorker, &SensorWorker::identifyFingerprint,
+                            Qt::QueuedConnection);
 }
 
-void Controller::identifyFingerprint()
-{
-  if (!m_sensor || !m_sensorAvailable)
-  {
+void Controller::verifyFingerprint(int id) {
+  if (!m_sensorAvailable) {
     emit operationFailed("Sensor not available");
     return;
   }
 
-  qDebug() << "Identifying fingerprint";
+  // qDebug() << "Verifying fingerprint for ID:" << id;
   setIsProcessing(true);
-
-  emit operationComplete("Place finger on sensor...");
-
-  carbio::StatusCode status = m_sensor->captureImage();
-  if (status != carbio::StatusCode::Success)
-  {
-    setIsProcessing(false);
-    emit operationFailed("Failed to capture image");
-    return;
-  }
-
-  status = m_sensor->imageToTemplate(1);
-  if (status != carbio::StatusCode::Success)
-  {
-    setIsProcessing(false);
-    emit operationFailed("Failed to create template");
-    return;
-  }
-
-  auto result = m_sensor->fastSearch();
-  if (!result)
-  {
-    setIsProcessing(false);
-    emit operationFailed("No matching fingerprint found");
-    return;
-  }
-
-  QString driverName = lookupDriverName(result->fingerId);
-  setIsProcessing(false);
-  emit operationComplete("Identified: " + driverName + " [ID #" + QString::number(result->fingerId) +
-                        ", Confidence: " + QString::number(result->confidence) + "]");
+  QMetaObject::invokeMethod(m_sensorWorker, "verifyFingerprint",
+                            Qt::QueuedConnection, Q_ARG(int, id));
 }
 
-void Controller::verifyFingerprint(int id)
-{
-  if (!m_sensor || !m_sensorAvailable)
-  {
+void Controller::queryTemplate(int id) {
+  if (!m_sensorAvailable) {
     emit operationFailed("Sensor not available");
     return;
   }
 
-  qDebug() << "Verifying fingerprint for ID:" << id;
-  setIsProcessing(true);
-
-  emit operationComplete("Place finger on sensor...");
-
-  // Capture image and create template
-  carbio::StatusCode status = m_sensor->captureImage();
-  if (status != carbio::StatusCode::Success)
-  {
-    setIsProcessing(false);
-    emit operationFailed("Failed to capture image");
-    return;
-  }
-
-  status = m_sensor->imageToTemplate(1);
-  if (status != carbio::StatusCode::Success)
-  {
-    setIsProcessing(false);
-    emit operationFailed("Failed to create template");
-    return;
-  }
-
-  // Load stored template into buffer 2
-  status = m_sensor->loadTemplate(static_cast<uint16_t>(id), 2);
-  if (status != carbio::StatusCode::Success)
-  {
-    setIsProcessing(false);
-    emit operationFailed("Template #" + QString::number(id) + " not found");
-    return;
-  }
-
-  // Search only for this specific ID
-  auto result = m_sensor->search(1, static_cast<uint16_t>(id), 1);
-  if (!result || result->fingerId != static_cast<uint16_t>(id))
-  {
-    setIsProcessing(false);
-    emit operationFailed("Fingerprint does NOT match ID #" + QString::number(id));
-    return;
-  }
-
-  setIsProcessing(false);
-  emit operationComplete("VERIFIED - ID #" + QString::number(id) +
-                        " (Confidence: " + QString::number(result->confidence) + ")");
+  // qDebug() << "Querying template for ID:" << id;
+  QMetaObject::invokeMethod(m_sensorWorker, "queryTemplate",
+                            Qt::QueuedConnection, Q_ARG(int, id));
 }
 
-void Controller::queryTemplate(int id)
-{
-  if (!m_sensor || !m_sensorAvailable)
-  {
+void Controller::deleteFingerprint(int id) {
+  if (!m_sensorAvailable) {
     emit operationFailed("Sensor not available");
     return;
   }
 
-  qDebug() << "Querying template for ID:" << id;
-
-  auto templates = m_sensor->fetchTemplates();
-  if (!templates)
-  {
-    emit operationFailed("Failed to fetch templates");
-    return;
-  }
-
-  bool found = std::find(templates->begin(), templates->end(), static_cast<uint16_t>(id)) != templates->end();
-  if (found)
-  {
-    emit operationComplete("Template #" + QString::number(id) + " EXISTS in database");
-  }
-  else
-  {
-    emit operationComplete("Template #" + QString::number(id) + " does NOT exist");
-  }
-}
-
-void Controller::deleteFingerprint(int id)
-{
-  if (!m_sensor || !m_sensorAvailable)
-  {
-    emit operationFailed("Sensor not available");
-    return;
-  }
-
-  if (m_scanTimer->isActive())
-  {
+  if (m_authState == AuthState::Scanning ||
+      m_authState == AuthState::Authenticating) {
     emit operationFailed("Cannot delete while authentication is active");
     return;
   }
 
-  if (id < 1 || id > 127)
-  {
+  if (id < 1 || id > 127) {
     emit operationFailed("Invalid ID. Must be between 1 and 127.");
     return;
   }
 
-  qDebug() << "Deleting fingerprint for ID:" << id;
+  // qDebug() << "Deleting fingerprint for ID:" << id;
   setIsProcessing(true);
-
-  if (m_sensor->deleteTemplate(static_cast<uint16_t>(id), 1) == carbio::StatusCode::Success)
-  {
-    setIsProcessing(false);
-    refreshTemplateCount();
-    emit operationComplete("Fingerprint #" + QString::number(id) + " deleted");
-  }
-  else
-  {
-    setIsProcessing(false);
-    emit operationFailed("Failed to delete fingerprint #" + QString::number(id));
-  }
+  QMetaObject::invokeMethod(m_sensorWorker, "deleteFingerprint",
+                            Qt::QueuedConnection, Q_ARG(int, id));
 }
 
-void Controller::clearDatabase()
-{
-  if (!m_sensor || !m_sensorAvailable)
-  {
+void Controller::clearDatabase() {
+  if (!m_sensorAvailable) {
     emit operationFailed("Sensor not available");
     return;
   }
 
-  if (m_scanTimer->isActive())
-  {
-    emit operationFailed("Cannot clear database while authentication is active");
+  if (m_authState == AuthState::Scanning ||
+      m_authState == AuthState::Authenticating) {
+    emit operationFailed(
+        "Cannot clear database while authentication is active");
     return;
   }
 
-  qDebug() << "Clearing fingerprint database";
+  // qDebug() << "Clearing fingerprint database";
   setIsProcessing(true);
-
-  if (m_sensor->clearDatabase() == carbio::StatusCode::Success)
-  {
-    setIsProcessing(false);
-    refreshTemplateCount();
-    emit operationComplete("All fingerprints deleted");
-  }
-  else
-  {
-    setIsProcessing(false);
-    emit operationFailed("Failed to clear database");
-  }
+  QMetaObject::invokeMethod(m_sensorWorker, &SensorWorker::clearDatabase,
+                            Qt::QueuedConnection);
 }
 
-void Controller::turnLedOn()
-{
-  if (!m_sensor || !m_sensorAvailable)
-  {
+void Controller::turnLedOn() {
+  if (!m_sensorAvailable) {
     emit operationFailed("Sensor not available");
     return;
   }
 
-  m_manualLedControl = true;
-  if (m_sensor->turnLedOn() == carbio::StatusCode::Success)
-  {
-    emit operationComplete("LED turned ON (manual control)");
-  }
-  else
-  {
-    m_manualLedControl = false;
-    emit operationFailed("Failed to turn LED on");
-  }
+  QMetaObject::invokeMethod(m_sensorWorker, &SensorWorker::turnLedOn,
+                            Qt::QueuedConnection);
 }
 
-void Controller::turnLedOff()
-{
-  if (!m_sensor || !m_sensorAvailable)
-  {
+void Controller::turnLedOff() {
+  if (!m_sensorAvailable) {
     emit operationFailed("Sensor not available");
     return;
   }
 
-  m_manualLedControl = true;
-  if (m_sensor->turnLedOff() == carbio::StatusCode::Success)
-  {
-    emit operationComplete("LED turned OFF (manual control)");
-  }
-  else
-  {
-    m_manualLedControl = false;
-    emit operationFailed("Failed to turn LED off");
-  }
+  QMetaObject::invokeMethod(m_sensorWorker, &SensorWorker::turnLedOff,
+                            Qt::QueuedConnection);
 }
 
-void Controller::toggleLed()
-{
-  if (!m_sensor || !m_sensorAvailable)
-  {
-    emit operationFailed("Sensor not available");
-    return;
-  }
-
-  // Toggle by trying to turn off first, if that fails assume it's off and turn on
-  carbio::StatusCode status = m_sensor->turnLedOff();
-  if (status == carbio::StatusCode::Success)
-  {
-    emit operationComplete("LED turned OFF");
-  }
-  else
-  {
-    // LED was probably already off, turn it on
-    status = m_sensor->turnLedOn();
-    if (status == carbio::StatusCode::Success)
-    {
-      emit operationComplete("LED turned ON");
-    }
-    else
-    {
-      emit operationFailed("Failed to toggle LED");
-    }
-  }
-}
-
-void Controller::setBaudRate(int baudChoice)
-{
-  if (!m_sensor || !m_sensorAvailable)
-  {
+void Controller::setBaudRate(int baudChoice) {
+  if (!m_sensorAvailable) {
     emit operationFailed("Sensor not available");
     return;
   }
 
   // Validate baud choice range
-  if (baudChoice < 1 || baudChoice > 12)
-  {
+  if (baudChoice < 1 || baudChoice > 12) {
     emit operationFailed("Invalid baud rate choice. Must be 1-12.");
     return;
   }
 
-  qDebug() << "Setting baud rate:" << baudChoice;
+  // qDebug() << "Setting baud rate:" << baudChoice;
 
-  carbio::BaudRateRegister baud;
-  switch (baudChoice)
-  {
-    case 1: baud = carbio::BaudRateRegister::_9600; break;
-    case 2: baud = carbio::BaudRateRegister::_19200; break;
-    case 3: baud = carbio::BaudRateRegister::_28800; break;
-    case 4: baud = carbio::BaudRateRegister::_38400; break;
-    case 5: baud = carbio::BaudRateRegister::_48000; break;
-    case 6: baud = carbio::BaudRateRegister::_57600; break;
-    case 7: baud = carbio::BaudRateRegister::_67200; break;
-    case 8: baud = carbio::BaudRateRegister::_76800; break;
-    case 9: baud = carbio::BaudRateRegister::_86400; break;
-    case 10: baud = carbio::BaudRateRegister::_96000; break;
-    case 11: baud = carbio::BaudRateRegister::_105600; break;
-    case 12: baud = carbio::BaudRateRegister::_115200; break;
-    default:
-      emit operationFailed("Invalid baud rate choice");
-      return;
-  }
-
-  if (m_sensor->setBaudRate(baud) == carbio::StatusCode::Success)
-  {
-    emit operationComplete("Baud rate updated. Reconnect required.");
-  }
-  else
-  {
-    emit operationFailed("Failed to set baud rate");
-  }
+  QMetaObject::invokeMethod(m_sensorWorker, "setBaudRate", Qt::QueuedConnection,
+                            Q_ARG(int, baudChoice));
 }
 
-void Controller::setSecurityLevel(int level)
-{
-  if (!m_sensor || !m_sensorAvailable)
-  {
+void Controller::setSecurityLevel(int level) {
+  if (!m_sensorAvailable) {
     emit operationFailed("Sensor not available");
     return;
   }
 
-  if (level < 1 || level > 5)
-  {
+  if (level < 1 || level > 5) {
     emit operationFailed("Invalid security level");
     return;
   }
 
-  auto secLevel = static_cast<carbio::SecurityLevelRegister>(level);
-  if (m_sensor->setSecurityLevelRegister(secLevel) == carbio::StatusCode::Success)
-  {
-    emit operationComplete("Security level updated");
-  }
-  else
-  {
-    emit operationFailed("Failed to set security level");
-  }
+  QMetaObject::invokeMethod(m_sensorWorker, "setSecurityLevel",
+                            Qt::QueuedConnection, Q_ARG(int, level));
 }
 
-void Controller::setPacketSize(int size)
-{
-  if (!m_sensor || !m_sensorAvailable)
-  {
+void Controller::setPacketSize(int size) {
+  if (!m_sensorAvailable) {
     emit operationFailed("Sensor not available");
     return;
   }
 
-  if (size < 0 || size > 3)
-  {
+  if (size < 0 || size > 3) {
     emit operationFailed("Invalid packet size");
     return;
   }
 
-  auto packetSize = static_cast<carbio::DataPacketSizeRegister>(size);
-  if (m_sensor->setDataPacketSizeRegister(packetSize) == carbio::StatusCode::Success)
-  {
-    emit operationComplete("Data packet size updated");
-  }
-  else
-  {
-    emit operationFailed("Failed to set packet size");
-  }
+  QMetaObject::invokeMethod(m_sensorWorker, "setPacketSize",
+                            Qt::QueuedConnection, Q_ARG(int, size));
 }
 
-void Controller::softResetSensor()
-{
-  if (!m_sensor || !m_sensorAvailable)
-  {
+void Controller::softResetSensor() {
+  if (!m_sensorAvailable) {
     emit operationFailed("Sensor not available");
     return;
   }
 
-  qDebug() << "Soft resetting sensor";
+  // qDebug() << "Soft resetting sensor";
 
-  if (m_sensor->softReset() == carbio::StatusCode::Success)
-  {
-    emit operationComplete("Sensor reset successfully");
-  }
-  else
-  {
-    emit operationFailed("Failed to reset sensor");
-  }
+  QMetaObject::invokeMethod(m_sensorWorker, &SensorWorker::softResetSensor,
+                            Qt::QueuedConnection);
 }
 
-void Controller::showSystemSettings()
-{
-  if (!m_sensor || !m_sensorAvailable)
-  {
+void Controller::showSystemSettings() {
+  if (!m_sensorAvailable) {
     emit operationFailed("Sensor not available");
     return;
   }
 
-  auto params = m_sensor->getParameters();
-  if (!params)
-  {
-    emit operationFailed("Failed to read system parameters");
-    return;
-  }
-
-  QString settings;
-  settings += "System Settings:\n";
-  settings += "Library Size: " + QString::number(params->capacity) + "\n";
-  settings += "Security Level: " + QString::number(params->SecurityLevel) + "\n";
-  settings += "Packet Length: " + QString::number(params->packetLength) + "\n";
-  settings += "Baud Rate: " + QString::number(params->baudRate);
-
-  emit operationComplete(settings);
+  QMetaObject::invokeMethod(m_sensorWorker, &SensorWorker::showSystemSettings,
+                            Qt::QueuedConnection);
 }
 
 // ============================================================================
 // Admin Authentication Methods
 // ============================================================================
 
-void Controller::requestAdminAccess()
-{
-  qInfo() << "Admin access requested";
+void Controller::requestAdminAccess() {
+  // qInfo() << "Admin access requested";
 
-  // Check rate limiting
-  if (m_adminAuth->isRateLimited())
-  {
-    int remaining = m_adminAuth->lockoutSecondsRemaining();
-    QString reason = QString("Too many failed attempts. Try again in %1 seconds.").arg(remaining);
-
-    m_auditLogger->logEvent(carbio::security::SecurityEvent::RATE_LIMIT_EXCEEDED, 0,
-                            carbio::security::AuthResult::RATE_LIMITED, reason);
-
-    emit adminAccessDenied(reason);
+  if (!m_sensorAvailable) {
+    emit adminAccessDenied("Sensor not available");
     return;
   }
 
   // Reset state
-  m_adminAuthPhase = AdminAuthPhase::PASSWORD_PENDING;
   setAdminMenuAccessible(false);
-  setAdminAccessToken("");
 
-  // Log attempt
-  m_auditLogger->logEvent(carbio::security::SecurityEvent::ADMIN_ACCESS_ATTEMPT, 0,
-                          carbio::security::AuthResult::SUCCESS, "Admin access request initiated");
+  // Direct biometric authentication - no password needed
+  emit adminFingerprintRequired();
 
-  // Request password from user
-  emit adminPasswordRequired();
-}
-
-void Controller::verifyAdminPassword(const QString &password)
-{
-  if (m_adminAuthPhase != AdminAuthPhase::PASSWORD_PENDING)
-  {
-    qWarning() << "Password verification called in wrong phase";
-    return;
-  }
-
-  qInfo() << "Verifying admin password";
-
-  bool valid = m_adminAuth->verifyPassword(password);
-  if (valid)
-  {
-    qInfo() << "Password verified";
-    m_auditLogger->logEvent(carbio::security::SecurityEvent::PASSWORD_VERIFIED, 0, carbio::security::AuthResult::SUCCESS, "Admin password correct");
-    m_adminAuthPhase = AdminAuthPhase::FINGERPRINT_PENDING;
-    emit adminFingerprintRequired();
-  }
-  else
-  {
-    qWarning() << "Password verification failed";
-    
-    setIsProcessing(false);
-    m_adminAuthPhase = AdminAuthPhase::IDLE;
-
-    m_auditLogger->logAdminAccess(0, true, false, false);
-    m_auditLogger->logUnauthorizedAccess(0, "Non-admin fingerprint attempted admin access");
-    
-    lockDashboardAfterAdminFailure();
-    
-    emit unauthorizedAccessDetected("Unauthorized admin access attempt detected. This incident has been logged.");
-    emit adminAccessDenied("Incorrect password");
-    return;
-  }
-}
-
-void Controller::startAdminFingerprintScan()
-{
-  if (m_adminAuthPhase != AdminAuthPhase::FINGERPRINT_PENDING)
-  {
-    qWarning() << "Fingerprint scan called in wrong phase";
-    emit adminAccessDenied("Invalid authentication flow");
-    return;
-  }
-
-  if (!m_sensor || !m_sensorAvailable)
-  {
-    emit adminAccessDenied("Sensor not available");
-    return;
-  }
-
-  qInfo() << "Starting admin fingerprint scan - waiting for finger...";
+  // qInfo() << "Starting admin fingerprint scan with fast polling (3ms = 333
+  // Hz)";
   setIsProcessing(true);
 
-  // Reset adaptive polling to responsive mode
-  resetAdminPollingInterval();
-
-  // Start polling for finger presence
-  m_adminFingerprintTimer->start();
+  // User is actively placing finger - use fast polling (3ms = 333 Hz)
+  QMetaObject::invokeMethod(m_sensorWorker, "startAdminPolling",
+                            Qt::QueuedConnection, Q_ARG(int, 3));
 }
 
-void Controller::onAdminFingerprintPoll()
-{
-  if (m_adminAuthPhase != AdminAuthPhase::FINGERPRINT_PENDING)
-  {
-    m_adminFingerprintTimer->stop();
-    return;
-  }
+// verifyAdminPassword and startAdminFingerprintScan removed - single-factor
+// biometric auth only
 
-  if (!m_sensor || !m_sensorAvailable)
-  {
-    m_adminFingerprintTimer->stop();
-    setIsProcessing(false);
-    emit adminAccessDenied("Sensor not available");
-    return;
-  }
+void Controller::revokeAdminAccess() {
+  // qInfo() << "Admin access revoked";
 
-  // Check if finger is present (non-blocking poll)
-  carbio::StatusCode status = m_sensor->captureImage();
-
-  // If no finger, implement adaptive polling with exponential backoff
-  if (status == carbio::StatusCode::NoFinger)
-  {
-    m_consecutiveNoFingerAdmin++;
-    adjustAdminPollingInterval();
-
-    return;
-  }
-
-  // Finger detected! Reset adaptive polling and stop polling
-  resetAdminPollingInterval();
-  m_adminFingerprintTimer->stop();
-
-  // Check if image capture was successful
-  if (status != carbio::StatusCode::Success)
-  {
-    qWarning() << "Failed to capture fingerprint during admin access - initiating security lockdown";
-    setIsProcessing(false);
-    m_adminAuthPhase = AdminAuthPhase::IDLE;
-    m_auditLogger->logUnauthorizedAccess(0, "Failed to capture fingerprint during admin access");
-    lockDashboardAfterAdminFailure();
-    emit adminAccessDenied("Failed to capture fingerprint");
-    return;
-  }
-
-  qInfo() << "Admin finger detected and image captured - verifying...";
-  performAdminFingerprintVerification();
-}
-
-void Controller::performAdminFingerprintVerification()
-{
-  // Convert captured image to template
-  carbio::StatusCode status = m_sensor->imageToTemplate(1);
-  if (status != carbio::StatusCode::Success)
-  {
-    qWarning() << "Failed to create template during admin access - initiating security lockdown";
-
-    setIsProcessing(false);
-    m_adminAuthPhase = AdminAuthPhase::IDLE;
-
-    m_auditLogger->logUnauthorizedAccess(0, "Failed to create template during admin access");
-    lockDashboardAfterAdminFailure();
-
-    emit adminAccessDenied("Failed to process fingerprint");
-    return;
-  }
-
-  // Search for match
-  auto result = m_sensor->fastSearch();
-  if (!result)
-  {
-    qWarning() << "Fingerprint NOT FOUND during admin access - initiating security lockdown";
-
-    setIsProcessing(false);
-    m_adminAuthPhase = AdminAuthPhase::IDLE;
-
-    m_auditLogger->logAdminAccess(0, true, false, false);
-    m_auditLogger->logUnauthorizedAccess(0, "Non-admin fingerprint attempted admin access");
-
-    lockDashboardAfterAdminFailure();
-
-    emit unauthorizedAccessDetected("Unauthorized admin access attempt detected. This incident has been logged.");
-    emit adminAccessDenied("Fingerprint not recognized");
-    return;
-  }
-
-  uint16_t fingerprintId = result->fingerId;
-  uint16_t confidence = result->confidence;
-
-  qInfo() << "Fingerprint matched - ID:" << fingerprintId << "Confidence:" << confidence;
-
-  // Check if fingerprint is admin (ID 0-2)
-  if (!isAdminFingerprint(fingerprintId))
-  {
-    qWarning() << "Non-admin fingerprint (ID" << fingerprintId << ") attempted admin access - initiating security lockdown";
-
-    setIsProcessing(false);
-    m_adminAuthPhase = AdminAuthPhase::IDLE;
-
-    m_auditLogger->logAdminAccess(fingerprintId, true, false, false);
-    m_auditLogger->logUnauthorizedAccess(fingerprintId,
-                                         QString("Non-admin user (ID %1) attempted admin access with valid password")
-                                             .arg(fingerprintId));
-    
-    lockDashboardAfterAdminFailure();
-    
-    emit unauthorizedAccessDetected(QString("WARNING: User ID %1 attempted unauthorized admin access.\n\n"
-                                            "This incident has been logged and reported.")
-                                        .arg(fingerprintId));
-    emit adminAccessDenied("Insufficient privileges");
-    return;
-  }
-
-  // Check confidence threshold
-  if (confidence < carbio::security::MIN_ADMIN_CONFIDENCE)
-  {
-    qWarning() << "Too low confidence (confidence:" << confidence << ") - initiating security lockdown";
-    
-    setIsProcessing(false);
-    m_adminAuthPhase = AdminAuthPhase::IDLE;
-
-    m_auditLogger->logUnauthorizedAccess(fingerprintId,
-                                         QString("Too low confidence during admin access (confidence: %1)")
-                                             .arg(confidence));
-
-    lockDashboardAfterAdminFailure();
-    emit adminAccessDenied(QString("Too low confidence (%1). Try again.").arg(confidence));
-    return;
-  }
-
-  // SUCCESS! Generate session token
-  QString token = m_sessionManager->generateToken(fingerprintId);
-  if (token.isEmpty())
-  {
-    setIsProcessing(false);
-    m_adminAuthPhase = AdminAuthPhase::IDLE;
-
-    m_auditLogger->logEvent(carbio::security::SecurityEvent::ADMIN_ACCESS_DENIED, fingerprintId,
-                            carbio::security::AuthResult::SYSTEM_ERROR, "Failed to generate session token");
-
-    emit adminAccessDenied("System error - token generation failed");
-    return;
-  }
-
-  // Log successful access
-  m_auditLogger->logAdminAccess(fingerprintId, true, true, true);
-  m_auditLogger->logEvent(carbio::security::SecurityEvent::ADMIN_ACCESS_GRANTED, fingerprintId,
-                          carbio::security::AuthResult::SUCCESS,
-                          QString("Admin %1 granted access with confidence %2").arg(fingerprintId).arg(confidence));
-
-  setIsProcessing(false);
-  m_adminAuthPhase = AdminAuthPhase::COMPLETED;
-  setAdminMenuAccessible(true);
-  setAdminAccessToken(token);
-
-  qInfo() << "Admin access granted to fingerprint ID:" << fingerprintId;
-  emit adminAccessGranted(token);
-}
-
-void Controller::revokeAdminAccess()
-{
-  qInfo() << "Admin access revoked";
-
-  m_sessionManager->revokeAllSessions();
-  m_adminAuthPhase = AdminAuthPhase::IDLE;
   setAdminMenuAccessible(false);
-  setAdminAccessToken("");
-
-  m_auditLogger->logEvent(carbio::security::SecurityEvent::SESSION_ENDED, 0,
-                          carbio::security::AuthResult::SUCCESS, "Admin session manually revoked");
-  
   emit adminAccessRevoked();
 }
 
-void Controller::lockDashboardAfterAdminFailure()
-{
-  qInfo() << "SECURITY EVENT: Locking dashboard after admin authentication failure";
-  
+void Controller::lockDashboardAfterAdminFailure() {
+  // qInfo() << "locking dashboard after admin authentication failure";
+
   m_failedAttempts = 0;
   emit failedAttemptsChanged();
-  
-  setAuthState(AuthState::SCANNING);
 
-  if (!m_scanTimer->isActive())
-  {
-    qInfo() << "Restarting authentication scanner for re-entry";
+  // Restart authentication if not already running
+  if (m_authState != AuthState::Scanning) {
+    // qInfo() << "restarting authentication scanner for re-entry";
     startAuthentication();
   }
-  
-  qInfo() << "Dashboard locked - user must re-authenticate to regain access";
+
+  // qInfo() << "user must re-authenticate to regain access";
 }
 
-bool Controller::isAdminFingerprint(int fingerprintId) const
-{
-  return fingerprintId >= carbio::security::ADMIN_ID_MIN && fingerprintId <= carbio::security::ADMIN_ID_MAX;
+bool Controller::isAdminFingerprint(int fingerprintId) const {
+  return fingerprintId >= carbio::security::ADMIN_ID_MIN &&
+         fingerprintId <= carbio::security::ADMIN_ID_MAX;
 }
 
-void Controller::setAdminMenuAccessible(bool accessible)
-{
-  if (m_isAdminMenuAccessible != accessible)
-  {
+void Controller::setAdminMenuAccessible(bool accessible) {
+  if (m_isAdminMenuAccessible != accessible) {
     m_isAdminMenuAccessible = accessible;
     emit isAdminMenuAccessibleChanged();
   }
 }
 
-void Controller::setAdminAccessToken(const QString &token)
-{
-  if (m_adminAccessToken != token)
+void Controller::setScanProgress(int progress) {
+  if (m_scanProgress != progress && progress > 0) // skip 0->0 transitions
   {
-    m_adminAccessToken = token;
-    emit adminAccessTokenChanged();
+    m_scanProgress = progress;
+    // qDebug() << "Scan progress:" << progress << "%";
+    emit scanProgressChanged();
   }
+}
+
+void Controller::enableSensorAutoFingerDetection() {
+  if (!m_sensor || !m_sensorAvailable) {
+    return;
+  }
+
+  QMetaObject::invokeMethod(m_sensorWorker, &SensorWorker::turnLedOn,
+                            Qt::QueuedConnection);
+  // qDebug() << "AFD enabled (LED ON proxy)";
+}
+
+void Controller::disableSensorAutoFingerDetection() {
+  if (!m_sensor || !m_sensorAvailable) {
+    return;
+  }
+
+  QMetaObject::invokeMethod(m_sensorWorker, &SensorWorker::turnLedOff,
+                            Qt::QueuedConnection);
+  // qDebug() << "AFD disabled (LED OFF proxy)";
 }
 
 // ============================================================================
-// Adaptive Polling Methods
+// Profile Management Methods
 // ============================================================================
 
-void Controller::adjustAuthPollingInterval()
-{
-  // Exponential backoff: interval = min(current * 2, MAX)
-  int currentInterval = m_scanTimer->interval();
-  int newInterval = std::min(currentInterval * POLL_BACKOFF_FACTOR, POLL_INTERVAL_MAX);
-
-  if (newInterval != currentInterval)
-  {
-    m_scanTimer->setInterval(newInterval);
-    qDebug() << "Auth polling interval adjusted:" << currentInterval << "ms →" << newInterval << "ms"
-             << "(consecutive misses:" << m_consecutiveNoFingerAuth << ")";
+void Controller::enrollFingerprint(int id) {
+  // Validate inputs
+  if (id < 0 || id > 127) {
+    emit operationFailed("Invalid ID. Must be between 0 and 127.");
+    return;
   }
+
+  if (!m_sensorAvailable) {
+    emit operationFailed("Sensor not available");
+    return;
+  }
+
+  if (m_authState == AuthState::Scanning ||
+      m_authState == AuthState::Authenticating) {
+    emit operationFailed(
+        "Cannot enroll while authentication is active. Close settings first.");
+    return;
+  }
+
+  // qInfo() << "Starting fingerprint enrollment for ID:" << id << "(Admin:" <<
+  // (id <= 2 ? "Yes" : "No") << ")";
+
+  // Enroll fingerprint directly to sensor
+  setIsProcessing(true);
+  setOperationProgress("Please scan your finger...");
+
+  QMetaObject::invokeMethod(m_sensorWorker, "enrollFingerprint",
+                            Qt::QueuedConnection, Q_ARG(int, id));
 }
 
-void Controller::adjustAdminPollingInterval()
-{
-  // Exponential backoff: interval = min(current * 2, MAX)
-  int currentInterval = m_adminFingerprintTimer->interval();
-  int newInterval = std::min(currentInterval * POLL_BACKOFF_FACTOR, POLL_INTERVAL_MAX);
+void Controller::cleanupBeforeExit() {
+  // Turn LED off before app exit
+  // This must complete synchronously to ensure LED is off before process
+  // terminates Using BlockingQueuedConnection ensures the LED off command
+  // completes before returning
 
-  if (newInterval != currentInterval)
-  {
-    m_adminFingerprintTimer->setInterval(newInterval);
-    qDebug() << "Admin polling interval adjusted:" << currentInterval << "ms →" << newInterval << "ms"
-             << "(consecutive misses:" << m_consecutiveNoFingerAdmin << ")";
+  if (!m_sensorAvailable) {
+    return;
   }
-}
 
-void Controller::resetAuthPollingInterval()
-{
-  m_consecutiveNoFingerAuth = 0;
-  if (m_scanTimer->interval() != POLL_INTERVAL_MIN)
-  {
-    m_scanTimer->setInterval(POLL_INTERVAL_MIN);
-    qDebug() << "Auth polling interval reset to" << POLL_INTERVAL_MIN << "ms (finger detected)";
-  }
-}
+  // qInfo() << "Cleaning up sensor before exit - turning LED off";
 
-void Controller::resetAdminPollingInterval()
-{
-  m_consecutiveNoFingerAdmin = 0;
-  if (m_adminFingerprintTimer->interval() != POLL_INTERVAL_MIN)
-  {
-    m_adminFingerprintTimer->setInterval(POLL_INTERVAL_MIN);
-    qDebug() << "Admin polling interval reset to" << POLL_INTERVAL_MIN << "ms (finger detected)";
-  }
+  // Stop all polling first
+  QMetaObject::invokeMethod(m_sensorWorker, "stopAuthenticationPolling",
+                            Qt::QueuedConnection);
+
+  // Must use BlockingQueuedConnection to ensure LED turns off before app exits
+  // QueuedConnection would queue the command but app might exit before it
+  // executes
+  QMetaObject::invokeMethod(m_sensorWorker, &SensorWorker::turnLedOff,
+                            Qt::BlockingQueuedConnection);
+
+  // qInfo() << "Sensor cleanup complete";
 }

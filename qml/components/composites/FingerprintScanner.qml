@@ -1,5 +1,6 @@
 import QtQuick
 import "../atoms"
+import ".."  // For ProgressRing
 
 Item {
     id: fingerprintScanner
@@ -7,6 +8,7 @@ Item {
     // Props
     property int failedAttempts: 0
     property bool isScanning: true
+    property int scanProgress: 0  // 0-100
 
     // Dimensions
     width: 240
@@ -22,35 +24,68 @@ Item {
             height: 240
             anchors.horizontalCenter: parent.horizontalCenter
 
-            // Outer pulsing ring
-            AnimatedRing {
-                id: outerRing
+            // Progress ring - shows scan progress when active
+            ProgressRing {
+                id: progressRing
                 anchors.centerIn: parent
-                ringDiameter: 240
-                ringWidth: 4
-                ringColor: "#0088FF"
-                baseOpacity: 0.6
-                animationEnabled: isScanning
-                pulseDuration: 1500
-                scaleFrom: 1.0
-                scaleTo: 1.2
-                opacityFrom: 0.6
-                opacityTo: 0.2
+                implicitWidth: 240
+                implicitHeight: 240
+                ringWidth: 6
+                ringColor: scanProgress > 0 ? "#00FF88" : "#0088FF"
+                backgroundColor: "#2A2A2A"
+                progress: scanProgress > 0 ? scanProgress : -2  // -2 = pulse mode
+                showPercentage: false
+                visible: scanProgress > 0
+                opacity: scanProgress > 0 ? 1.0 : 0.0
+
+                Behavior on opacity {
+                    NumberAnimation { duration: 200 }
+                }
             }
 
-            // Middle ring
-            AnimatedRing {
+            // Outer pulsing ring (when not scanning) - unified ProgressRing in pulse mode
+            ProgressRing {
+                id: outerRing
                 anchors.centerIn: parent
-                ringDiameter: 180
+                implicitWidth: 240
+                implicitHeight: 240
+                ringWidth: 4
+                ringColor: "#0088FF"
+                backgroundColor: "transparent"
+                progress: (isScanning && scanProgress === 0) ? -2 : 0
+                showPercentage: false
+                pulseScaleFrom: 1.0
+                pulseScaleTo: 1.2
+                pulseOpacityFrom: 0.6
+                pulseOpacityTo: 0.2
+                pulseDuration: 1500
+                opacity: scanProgress > 0 ? 0.0 : 0.6
+
+                Behavior on opacity {
+                    NumberAnimation { duration: 300 }
+                }
+            }
+
+            // Middle ring - unified ProgressRing in pulse mode
+            ProgressRing {
+                anchors.centerIn: parent
+                implicitWidth: 180
+                implicitHeight: 180
                 ringWidth: 3
                 ringColor: "#00AAFF"
-                baseOpacity: 0.8
-                animationEnabled: isScanning
+                backgroundColor: "transparent"
+                progress: (isScanning && scanProgress === 0) ? -2 : 0
+                showPercentage: false
+                pulseScaleFrom: 1.0
+                pulseScaleTo: 1.0
+                pulseOpacityFrom: 0.8
+                pulseOpacityTo: 0.4
                 pulseDuration: 1200
-                scaleFrom: 1.0
-                scaleTo: 1.0
-                opacityFrom: 0.8
-                opacityTo: 0.4
+                opacity: scanProgress > 0 ? 0.0 : 0.8
+
+                Behavior on opacity {
+                    NumberAnimation { duration: 300 }
+                }
             }
 
             // Fingerprint icon center

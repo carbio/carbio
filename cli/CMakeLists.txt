@@ -1,4 +1,4 @@
-find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui Qml Quick Quick3D Core5Compat)
+find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui Qml Quick)
 
 qt_standard_project_setup()
 
@@ -11,13 +11,8 @@ qt_add_executable(carbiod
   radialbar.h
   controller.h
   controller.cpp
-  admin_authenticator.h
-  admin_authenticator.cpp
-  session_manager.h
-  session_manager.cpp
-  audit_logger.h
-  audit_logger.cpp
-  security_types.h
+  sensor_worker.h
+  sensor_worker.cpp
   ${QRC_QML}
   ${QRC_RES}
 )
@@ -32,8 +27,6 @@ target_link_libraries(carbiod PRIVATE
   Qt6::Gui
   Qt6::Qml
   Qt6::Quick
-  Qt6::Quick3D
-  Qt6::Core5Compat
   carbio
 )
 

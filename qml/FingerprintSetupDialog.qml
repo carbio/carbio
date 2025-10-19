@@ -4,14 +4,13 @@ import QtQuick.Layouts
 
 Rectangle {
     id: fingerprintSetupDialog
-    anchors.fill: parent
+    anchors.centerIn: parent
     color: "#2A2A2A"
     radius: 15
     border.color: "#01E4E0"
     border.width: 2
     visible: false
     
-
     signal closed()
 
     function open() {
@@ -65,37 +64,32 @@ Rectangle {
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 25
-            spacing: 75
+            spacing: 20
             
-            RowLayout {
-                anchors.fill: parent
-                anchors.margins: 15
-                spacing: 15
-
-                // Title with fingerprint icon
-                Rectangle {
-                    Layout.alignment: Qt.AlignHLeft
-                    color: "transparent"
+            // FIXED: Title row with proper alignment
+            Item {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 40
+                
+                Label {
                     anchors.left: parent.left
-
-                    Label {
-                        text: "FINGERPRINT SETUP"
-                        font.pixelSize: 32
-                        font.family: "Inter"
-                        font.bold: Font.Bold
-                        color: "#01E4E0"
-                    }
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "FINGERPRINT SETUP"
+                    font.pixelSize: 32
+                    font.family: "Inter"
+                    font.bold: Font.Bold
+                    color: "#01E4E0"
                 }
 
-                // Close button
                 Rectangle {
-                    Layout.preferredWidth: 30
-                    Layout.preferredHeight: 30
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 30
+                    height: 30
                     radius: 15
                     color: closeMouseArea.containsMouse ? "#4A4A4A" : "#3A3A3A"
                     border.color: "#666666"
                     border.width: 1
-                    anchors.right: parent.right
 
                     Behavior on color { ColorAnimation { duration: 150 } }
 
@@ -130,10 +124,9 @@ Rectangle {
                         }
                     }
                 }
-
             }
 
-            // Template count display
+            // FIXED: Template count display with proper alignment
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 50
@@ -153,7 +146,6 @@ Rectangle {
                         font.family: "Inter"
                         color: "#AAAAAA"
                         Layout.fillWidth: true
-                        anchors.centerIn: parent
                     }
 
                     Rectangle {
@@ -172,14 +164,12 @@ Rectangle {
                             font.pixelSize: 18
                             font.family: "Courier New"
                             font.bold: Font.Bold
-                            anchors.left: parent.left
                             color: controller.templateCount > 0 ? "#1E1E1E" : "#AAAAAA"
 
                             Behavior on color { ColorAnimation { duration: 200 } }
                         }
                     }
 
-                    // Refresh button
                     Rectangle {
                         Layout.preferredWidth: 35
                         Layout.preferredHeight: 35
@@ -206,7 +196,6 @@ Rectangle {
                                 ctx.lineWidth = 2
                                 ctx.lineCap = "round"
 
-                                // Draw refresh arrow
                                 var centerX = width / 2
                                 var centerY = height / 2
                                 var radius = 10
@@ -215,7 +204,6 @@ Rectangle {
                                 ctx.arc(centerX, centerY, radius, -Math.PI / 4, Math.PI * 1.5, false)
                                 ctx.stroke()
 
-                                // Arrow head
                                 ctx.beginPath()
                                 ctx.moveTo(centerX + radius * 0.7, centerY - radius * 0.7)
                                 ctx.lineTo(centerX + radius * 0.7 + 4, centerY - radius * 0.7 - 4)
@@ -243,30 +231,35 @@ Rectangle {
                     
                     MenuButton {
                         text: "Enroll Print"
+                        keyText: "1"
                         description: "Register new fingerprint (ID 1-127)"
                         onClicked: enrollDialog.open()
                     }
 
                     MenuButton {
                         text: "Find Print"
+                        keyText: "2"
                         description: "Scan and find fingerprint details"
-                        onClicked: controller.findFingerprint()
+                        onClicked: findDialog.open()
                     }
 
                     MenuButton {
                         text: "Identify Print"
+                        keyText: "3"
                         description: "Identify without knowing ID"
-                        onClicked: controller.identifyFingerprint()
+                        onClicked: identifyDialog.open()
                     }
 
                     MenuButton {
                         text: "Verify Print"
+                        keyText: "4"
                         description: "Verify specific ID"
                         onClicked: verifyDialog.open()
                     }
 
                     MenuButton {
                         text: "Query Print"
+                        keyText: "5"
                         description: "Check if template exists"
                         onClicked: queryDialog.open()
                     }
@@ -281,6 +274,7 @@ Rectangle {
                     
                     MenuButton {
                         text: "Delete Print"
+                        keyText: "6"
                         description: "Remove fingerprint by ID"
                         textColor: "#FFA500"
                         onClicked: deleteDialog.open()
@@ -288,6 +282,7 @@ Rectangle {
 
                     MenuButton {
                         text: "Clear Database"
+                        keyText: "7"
                         description: "Delete ALL fingerprints"
                         textColor: "#FF6666"
                         onClicked: clearDialog.open()
@@ -303,18 +298,21 @@ Rectangle {
                     
                     MenuButton {
                         text: "LED Control"
+                        keyText: "8"
                         description: "Sensor LED on/off/toggle"
                         onClicked: ledDialog.open()
                     }
 
                     MenuButton {
                         text: "System Config"
+                        keyText: "9"
                         description: "Baud rate, security, settings"
                         onClicked: configDialog.open()
                     }
 
                     MenuButton {
                         text: "Soft Reset"
+                        keyText: "0"
                         description: "Reset sensor to defaults"
                         onClicked: controller.softResetSensor()
                     }
@@ -326,31 +324,40 @@ Rectangle {
         EnrollDialog {
             id: enrollDialog
         }
-        
+
+        FindFingerprintDialog {
+            id: findDialog
+        }
+
+        IdentifyFingerprintDialog {
+            id: identifyDialog
+        }
+
         VerifyDialog {
             id: verifyDialog
         }
-        
+
         QueryDialog {
             id: queryDialog
         }
-        
+
         DeleteDialog {
             id: deleteDialog
         }
-        
+
         ClearConfirmDialog {
             id: clearDialog
         }
-        
+
         LEDControlDialog {
             id: ledDialog
         }
-        
+
         SystemConfigDialog {
             id: configDialog
         }
         
+        // FIXED: MenuButton component with proper alignment
         component MenuButton: Rectangle {
             property string text: ""
             property string keyText: ""
@@ -383,48 +390,50 @@ Rectangle {
                 onClicked: parent.clicked()
             }
             
-            RowLayout {
-                anchors.fill: parent
-                anchors.margins: 15
-                spacing: 15
+            Rectangle {
+                id: keyBox
+                anchors.left: parent.left
+                anchors.leftMargin: 15
+                anchors.verticalCenter: parent.verticalCenter
+                width: 35
+                height: 35
+                radius: 6
+                color: "#1E1E1E"
+                border.color: "#01E4E0"
+                border.width: 1
                 
-                Rectangle {
-                    Layout.preferredWidth: 35
-                    Layout.preferredHeight: 35
-                    radius: 6
-                    color: "#1E1E1E"
-                    border.color: "#01E4E0"
-                    border.width: 1
-                    
-                    Label {
-                        anchors.centerIn: parent
-                        text: keyText
-                        font.pixelSize: 18
-                        font.bold: Font.Bold
-                        font.family: "Courier New"
-                        color: "#01E4E0"
-                    }
+                Label {
+                    anchors.centerIn: parent
+                    text: keyText
+                    font.pixelSize: 18
+                    font.bold: Font.Bold
+                    font.family: "Courier New"
+                    color: "#01E4E0"
+                }
+            }
+            
+            Column {
+                anchors.left: keyBox.right
+                anchors.leftMargin: 15
+                anchors.right: parent.right
+                anchors.rightMargin: 15
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 2
+                
+                Label {
+                    text: parent.parent.text
+                    font.pixelSize: 18
+                    font.family: "Inter"
+                    font.bold: Font.DemiBold
+                    color: textColor
                 }
                 
-                ColumnLayout {
-                    spacing: 2
-                    Layout.fillWidth: true
-                    
-                    Label {
-                        text: parent.parent.parent.text
-                        font.pixelSize: 18
-                        font.family: "Inter"
-                        font.bold: Font.DemiBold
-                        color: textColor
-                    }
-                    
-                    Label {
-                        text: description
-                        font.pixelSize: 13
-                        font.family: "Inter"
-                        color: "#AAAAAA"
-                        opacity: 0.8
-                    }
+                Label {
+                    text: description
+                    font.pixelSize: 13
+                    font.family: "Inter"
+                    color: "#AAAAAA"
+                    opacity: 0.8
                 }
             }
         }

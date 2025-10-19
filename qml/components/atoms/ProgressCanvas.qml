@@ -42,10 +42,11 @@ Canvas {
 
             // Draw glow effect
             if (showGlow) {
+                // Extract RGB components from QML color (0.0-1.0 range) and convert to 0-255
                 ctx.strokeStyle = "rgba(" +
-                    parseInt(progressColor.substring(1, 3), 16) + "," +
-                    parseInt(progressColor.substring(3, 5), 16) + "," +
-                    parseInt(progressColor.substring(5, 7), 16) + "," +
+                    Math.round(progressColor.r * 255) + "," +
+                    Math.round(progressColor.g * 255) + "," +
+                    Math.round(progressColor.b * 255) + "," +
                     glowOpacity + ")"
                 ctx.lineWidth = glowLineWidth
                 ctx.beginPath()

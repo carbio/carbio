@@ -31,8 +31,8 @@ Rectangle {
     property int failedAttempts: 0
     property int lockoutSeconds: 0
     property int maxLockoutSeconds: 20
-    property string driverName: ""
     property bool isProcessing: false
+    property int scanProgress: 0  // 0-100
 
     // Monitor state transitions to ensure clean resets
     onAuthStateChanged: {
@@ -48,8 +48,8 @@ Rectangle {
 
     Behavior on opacity {
         NumberAnimation {
-            duration: 400
-            easing.type: Easing.InOutCubic
+            duration: 300
+            easing.type: Easing.OutCubic
         }
     }
 
@@ -89,14 +89,12 @@ Rectangle {
         }
     ]
 
-    // Smooth transitions between states with cross-fade and subtle scale effect
+    // Instant transitions for real-time feedback
     transitions: [
         Transition {
             from: "*"
             to: "*"
-
             SequentialAnimation {
-                // Fade out old state and fade in new state simultaneously with scale
                 ParallelAnimation {
                     NumberAnimation {
                         properties: "opacity,scale"
@@ -104,7 +102,6 @@ Rectangle {
                         easing.type: Easing.InOutCubic
                     }
                 }
-                // Update visibility after opacity animation completes
                 PropertyAction { property: "visible" }
             }
         }
@@ -139,6 +136,7 @@ Rectangle {
         enabled: false
         failedAttempts: authPrompt.failedAttempts
         isScanning: opacity > 0.5 && enabled
+        scanProgress: 0  // No progress in scanning state
     }
 
     AuthProgress {
@@ -149,6 +147,7 @@ Rectangle {
         visible: false
         enabled: false
         isProcessing: opacity > 0.5 && enabled
+        scanProgress: authPrompt.scanProgress
     }
 
     // ALERT State - Security lockout
@@ -172,10 +171,8 @@ Rectangle {
     }
 
     // Functions to trigger animations
-    function showSuccess(name) {
-        driverName = name
+    function showSuccess() {
         feedbackOverlay.feedbackType = "success"
-        feedbackOverlay.driverName = name
         feedbackOverlay.show()
     }
 

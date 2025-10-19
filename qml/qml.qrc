@@ -8,16 +8,18 @@
         <file>ClearConfirmDialog.qml</file>
         <file>DeleteDialog.qml</file>
         <file>EnrollDialog.qml</file>
+        <file>FindFingerprintDialog.qml</file>
+        <file>IdentifyFingerprintDialog.qml</file>
         <file>FingerprintSetupDialog.qml</file>
         <file>LEDControlDialog.qml</file>
         <file>QueryDialog.qml</file>
         <file>SystemConfigDialog.qml</file>
         <file>VerifyDialog.qml</file>
-        <file>AdminPasswordDialog.qml</file>
+        <file>AdminFingerprintDialog.qml</file>
         <file>UnauthorizedAccessWarning.qml</file>
 
         <!-- Atomic Components -->
-        <file>components/atoms/AnimatedRing.qml</file>
+        <file>components/ProgressRing.qml</file>
         <file>components/atoms/CheckmarkCanvas.qml</file>
         <file>components/atoms/CountdownTimer.qml</file>
         <file>components/atoms/FingerprintRidges.qml</file>
