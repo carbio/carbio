@@ -10,11 +10,21 @@ Produce a practical solution for enhancing safety and security in vehicular envi
 
 ### Hardware
 
-* **Raspberry Pi 5** central host
-* **Adafruit Fingerprint Sensor ID** biometric module
+* **Raspberry Pi 5** (4GB RAM, quad-core Cortex-A76 @ 2.4 GHz) central host
+* **Adafruit Fingerprint Sensor ID751** (R503-based) biometric module
 
 ### Software
 
 * **C++ 20** standard
+* **Qt 6** (QML/Quick) for GUI
 * **CMake** for project cross build
+* **Conan** for dependency management
+
+## Documentation
+
+Full thesis documentation (Hungarian) available in `docs/` folder.
+
+## License
+
+MIT License - See individual file headers for details.
 

@@ -3,16 +3,25 @@ project(carbio)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Init.cmake)
 
-add_subdirectory(src)
-add_subdirectory(cli)
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-option(CARBIO_BUILD_EXAMPLES "Build examples" OFF)
-if(CARBIO_BUILD_EXAMPLES)
-add_subdirectory(examples)
+add_subdirectory(src)
+
+option(CARBIO_BUILD_UNIT_TESTS "Build unit tests" OFF)
+if(CARBIO_BUILD_UNIT_TESTS)
+enable_testing()
+add_subdirectory(tests/unit)
 endif()
 
-option(CARBIO_BUILD_TESTS "Build unit tests" OFF)
-if(CARBIO_BUILD_TESTS)
+option(CARBIO_BUILD_INTEG_TESTS "Build integration tests" OFF)
+if(CARBIO_BUILD_INTEG_TESTS)
 enable_testing()
-add_subdirectory(tests)
+add_subdirectory(tests/integration)
+endif()
+
+option(CARBIO_BUILD_PERF_TESTS "Build performance tests" OFF)
+if(CARBIO_BUILD_PERF_TESTS)
+enable_testing()
+add_subdirectory(tests/performance)
 endif()

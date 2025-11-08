@@ -1,8 +1,26 @@
-# ------------------------------------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------- #
 
 Language                                  : Cpp
 BasedOnStyle                              : LLVM
-Standard                                  : Auto
+Standard                                  : Cpp11
+
+# ------------------------------------------------------------------- #
+
+ColumnLimit                               : 250
+
+AccessModifierOffset                      : -2
+IndentWidth                               : 2
+UseTab                                    : Never
+
+AlignEscapedNewlines                      : Left
+AllowShortFunctionsOnASingleLine          : Empty
+AllowShortLambdasOnASingleLine            : Empty
+AlwaysBreakTemplateDeclarations           : true
+BreakBeforeBraces                         : Allman
+BreakConstructorInitializers              : BeforeComma
+IndentPPDirectives                        : AfterHash
+PointerAlignment                          : Left
+
 # ------------------------------------------------------------------- #
 
 SortIncludes                              : CaseSensitive

@@ -1,6 +1,6 @@
-#include "carbio/io/serial_port.h"
-
 #include <gtest/gtest.h>
+
+#include "io/serial_port.h"
 
 #include <array>
 #include <chrono>
@@ -11,25 +11,35 @@
 #include <string_view>
 #include <vector>
 
-namespace carbio::integration_tests {
-class serial_serial_test : public testing::Test {
+namespace carbio::integration_tests
+{
+class serial_serial_test : public testing::Test
+{
 protected:
-  io::serial_port serial_;
+  serial_port serial_;
 
-  void SetUp() override {
-    try {
+  void SetUp() override
+  {
+    try
+    {
       serial_.open("/dev/ttyAMA0");
       ASSERT_TRUE(serial_.is_open()) << "Failed to open serial port";
       serial_.flush();
-    } catch (const std::exception &e) {
+    }
+    catch (const std::exception& e)
+    {
       FAIL() << "Failed to open serial port: " << e.what();
     }
   }
 
-  void TearDown() override {
-    try {
+  void TearDown() override
+  {
+    try
+    {
       serial_.close();
-    } catch (...) {
+    }
+    catch (...)
+    {
       // Ignore exceptions in teardown
     }
   }
@@ -39,11 +49,13 @@ protected:
 
 serial_serial_test::~serial_serial_test() = default;
 
-TEST_F(serial_serial_test, can_open_serial_device) {
+TEST_F(serial_serial_test, can_open_serial_device)
+{
   EXPECT_TRUE(serial_.is_open());
 }
 
-TEST_F(serial_serial_test, can_send_single_byte) {
+TEST_F(serial_serial_test, can_send_single_byte)
+{
   // Stack protector guard: ensure we have a local array >= 8 bytes
   [[maybe_unused]] volatile std::uint8_t stack_guard[8] = {0};
   std::array<uint8_t, 1> buffer = {0xEF};
@@ -51,14 +63,16 @@ TEST_F(serial_serial_test, can_send_single_byte) {
   EXPECT_EQ(result, 1u) << "Should send exactly 1 byte";
 }
 
-TEST_F(serial_serial_test, can_send_multiple_bytes) {
+TEST_F(serial_serial_test, can_send_multiple_bytes)
+{
   [[maybe_unused]] volatile std::uint8_t stack_guard[8] = {0};
   std::array<uint8_t, 4> buffer = {0xEF, 0x01, 0xFF, 0xFF};
   auto result = serial_.write_some(std::span{buffer});
   EXPECT_EQ(result, 4u) << "Should send exactly 4 bytes";
 }
 
-TEST_F(serial_serial_test, read_some_timeout_works) {
+TEST_F(serial_serial_test, read_some_timeout_works)
+{
   [[maybe_unused]] volatile std::uint8_t stack_guard[8] = {0};
   std::array<uint8_t, 1> buffer;
 
@@ -68,12 +82,12 @@ TEST_F(serial_serial_test, read_some_timeout_works) {
 
   EXPECT_EQ(result, 0) << "Non-blocking read should have timed out";
 
-  auto elapsed_ms =
-      std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+  auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
   EXPECT_LE(elapsed_ms, 10) << "Non-blocking read should return quickly";
 }
 
-TEST_F(serial_serial_test, read_exact_timeout_works) {
+TEST_F(serial_serial_test, read_exact_timeout_works)
+{
   [[maybe_unused]] volatile std::uint8_t stack_guard[8] = {0};
 
   std::array<uint8_t, 1> buffer;
@@ -85,13 +99,13 @@ TEST_F(serial_serial_test, read_exact_timeout_works) {
 
   EXPECT_EQ(result, 0u) << "read_exact should timeout and return 0";
 
-  auto elapsed_ms =
-      std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+  auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
   EXPECT_GE(elapsed_ms, 900) << "Should wait close to timeout";
   EXPECT_LE(elapsed_ms, 1200) << "Should timeout within reasonable margin";
 }
 
-TEST_F(serial_serial_test, flush_operations_work) {
+TEST_F(serial_serial_test, flush_operations_work)
+{
   [[maybe_unused]] volatile std::uint8_t stack_guard[8] = {0};
 
   std::array<uint8_t, 2> write_buffer = {0xEF, 0x01};
@@ -105,7 +119,8 @@ TEST_F(serial_serial_test, flush_operations_work) {
   EXPECT_EQ(read_result, 0u) << "Should have no data after flush";
 }
 
-TEST_F(serial_serial_test, reconnection_works) {
+TEST_F(serial_serial_test, reconnection_works)
+{
   [[maybe_unused]] volatile std::uint8_t stack_guard[8] = {0};
 
   ASSERT_TRUE(serial_.is_open());
@@ -113,170 +128,174 @@ TEST_F(serial_serial_test, reconnection_works) {
   serial_.close();
   EXPECT_FALSE(serial_.is_open());
 
-  try {
+  try
+  {
     serial_.open("/dev/ttyAMA0");
     EXPECT_TRUE(serial_.is_open());
 
     std::array<uint8_t, 2> write_buffer = {0xEF, 0x01};
     auto write_result = serial_.write_some(std::span{write_buffer});
     EXPECT_GE(write_result, 0u) << "Should work after reconnection";
-  } catch (const std::exception &e) {
+  }
+  catch (const std::exception& e)
+  {
     FAIL() << "Failed to re-open: " << e.what();
   }
 }
 
-TEST_F(serial_serial_test, operations_fail_when_disconnected) {
+TEST_F(serial_serial_test, operations_fail_when_disconnected)
+{
   [[maybe_unused]] volatile std::uint8_t stack_guard[8] = {0};
 
   serial_.close();
   EXPECT_FALSE(serial_.is_open());
 
   std::array<uint8_t, 1> read_buffer;
-  EXPECT_EQ(serial_.read_some(std::span{read_buffer}), 0)
-      << "read_some should return with zero bytes";
+  EXPECT_EQ(serial_.read_some(std::span{read_buffer}), 0) << "read_some should return with zero bytes";
 
   std::array<uint8_t, 2> write_buffer = {0x01, 0x02};
-  EXPECT_EQ(serial_.write_some(std::span{write_buffer}), 0)
-      << "write_some should return with zero bytes";
+  EXPECT_EQ(serial_.write_some(std::span{write_buffer}), 0) << "write_some should return with zero bytes";
 }
 
-TEST_F(serial_serial_test, serial_config_edge_cases) {
+TEST_F(serial_serial_test, serial_config_edge_cases)
+{
   serial_.close();
 
   std::vector<std::uint32_t> baud_rates = {9600, 19200, 38400, 57600, 115200};
 
-  for (auto baud_rate : baud_rates) {
-    try {
+  for (auto baud_rate : baud_rates)
+  {
+    try
+    {
       serial_.open("/dev/ttyAMA0");
       serial_.set_baud_rate(baud_rate);
-      serial_.set_data_width(io::data_width::_8);
-      serial_.set_stop_width(io::stop_width::_1);
-      serial_.set_parity_mode(io::parity_mode::none);
-      serial_.set_flow_control(io::flow_control::none);
-      EXPECT_TRUE(serial_.is_open())
-          << "Should open with baud rate: " << baud_rate;
+      serial_.set_data_width(data_width::_8);
+      serial_.set_stop_width(stop_width::_1);
+      serial_.set_parity_mode(parity_mode::none);
+      serial_.set_flow_control(flow_control::none);
+      EXPECT_TRUE(serial_.is_open()) << "Should open with baud rate: " << baud_rate;
       serial_.close();
-    } catch (const std::exception &e) {
-      FAIL() << "Failed to open with baud rate " << baud_rate << ": "
-             << e.what();
+    }
+    catch (const std::exception& e)
+    {
+      FAIL() << "Failed to open with baud rate " << baud_rate << ": " << e.what();
     }
   }
 }
 
-TEST_F(serial_serial_test, data_bits_configurations) {
+TEST_F(serial_serial_test, data_bits_configurations)
+{
   serial_.close();
 
-  std::vector<io::data_width> data_bits_options = {
-      io::data_width::_5, io::data_width::_6,
-      io::data_width::_7, io::data_width::_8};
+  std::vector<data_width> data_bits_options = {data_width::_5, data_width::_6, data_width::_7, data_width::_8};
 
-  for (auto bits : data_bits_options) {
-    try {
+  for (auto bits : data_bits_options)
+  {
+    try
+    {
       serial_.open("/dev/ttyAMA0");
       serial_.set_baud_rate(115200);
       serial_.set_data_width(bits);
-      serial_.set_stop_width(io::stop_width::_1);
-      serial_.set_parity_mode(io::parity_mode::none);
-      serial_.set_flow_control(io::flow_control::none);
-      EXPECT_TRUE(serial_.is_open())
-          << "Should open with data bits: " << static_cast<int>(bits);
+      serial_.set_stop_width(stop_width::_1);
+      serial_.set_parity_mode(parity_mode::none);
+      serial_.set_flow_control(flow_control::none);
+      EXPECT_TRUE(serial_.is_open()) << "Should open with data bits: " << static_cast<int>(bits);
 
       // Test basic write operation
       std::array<uint8_t, 1> test_data = {0x42};
       auto result = serial_.write_some(std::span{test_data});
-      EXPECT_EQ(result, 1u)
-          << "Should write with data bits: " << static_cast<int>(bits);
+      EXPECT_EQ(result, 1u) << "Should write with data bits: " << static_cast<int>(bits);
 
       serial_.close();
-    } catch (const std::exception &e) {
-      FAIL() << "Failed with data bits " << static_cast<int>(bits) << ": "
-             << e.what();
+    }
+    catch (const std::exception& e)
+    {
+      FAIL() << "Failed with data bits " << static_cast<int>(bits) << ": " << e.what();
     }
   }
 }
 
-TEST_F(serial_serial_test, parity_configurations) {
+TEST_F(serial_serial_test, parity_configurations)
+{
   serial_.close();
 
-  std::vector<io::parity_mode> parity_modes = {
-      io::parity_mode::none, io::parity_mode::odd,
-      io::parity_mode::even};
+  std::vector<parity_mode> parity_modes = {parity_mode::none, parity_mode::odd, parity_mode::even};
 
-  for (auto parity : parity_modes) {
-    try {
+  for (auto parity : parity_modes)
+  {
+    try
+    {
       serial_.open("/dev/ttyAMA0");
       serial_.set_baud_rate(115200);
-      serial_.set_data_width(io::data_width::_8);
-      serial_.set_stop_width(io::stop_width::_1);
+      serial_.set_data_width(data_width::_8);
+      serial_.set_stop_width(stop_width::_1);
       serial_.set_parity_mode(parity);
-      serial_.set_flow_control(io::flow_control::none);
-      EXPECT_TRUE(serial_.is_open())
-          << "Should open with parity: " << static_cast<int>(parity);
+      serial_.set_flow_control(flow_control::none);
+      EXPECT_TRUE(serial_.is_open()) << "Should open with parity: " << static_cast<int>(parity);
 
       // Test basic operation
       std::array<uint8_t, 2> test_data = {0xAA, 0x55};
       auto result = serial_.write_some(std::span{test_data});
-      EXPECT_EQ(result, 2u)
-          << "Should write with parity: " << static_cast<int>(parity);
+      EXPECT_EQ(result, 2u) << "Should write with parity: " << static_cast<int>(parity);
 
       serial_.close();
-    } catch (const std::exception &e) {
-      FAIL() << "Failed with parity " << static_cast<int>(parity) << ": "
-             << e.what();
+    }
+    catch (const std::exception& e)
+    {
+      FAIL() << "Failed with parity " << static_cast<int>(parity) << ": " << e.what();
     }
   }
 }
 
-TEST_F(serial_serial_test, flow_control_configurations) {
+TEST_F(serial_serial_test, flow_control_configurations)
+{
   serial_.close();
 
-  std::vector<io::flow_control> flow_modes = {
-      io::flow_control::none,
-      io::flow_control::software,
-      io::flow_control::hardware,
-      io::flow_control::both};
+  std::vector<flow_control> flow_modes = {flow_control::none, flow_control::software, flow_control::hardware, flow_control::both};
 
-  for (auto flow : flow_modes) {
-    try {
+  for (auto flow : flow_modes)
+  {
+    try
+    {
       serial_.open("/dev/ttyAMA0");
       serial_.set_baud_rate(115200);
-      serial_.set_data_width(io::data_width::_8);
-      serial_.set_stop_width(io::stop_width::_1);
-      serial_.set_parity_mode(io::parity_mode::none);
+      serial_.set_data_width(data_width::_8);
+      serial_.set_stop_width(stop_width::_1);
+      serial_.set_parity_mode(parity_mode::none);
       serial_.set_flow_control(flow);
-      EXPECT_TRUE(serial_.is_open())
-          << "Should open with flow control: " << static_cast<int>(flow);
+      EXPECT_TRUE(serial_.is_open()) << "Should open with flow control: " << static_cast<int>(flow);
 
       // Test basic operation
       std::array<uint8_t, 3> test_data = {0x01, 0x02, 0x03};
       auto result = serial_.write_some(std::span{test_data});
-      EXPECT_EQ(result, 3u)
-          << "Should write with flow control: " << static_cast<int>(flow);
+      EXPECT_EQ(result, 3u) << "Should write with flow control: " << static_cast<int>(flow);
 
       serial_.close();
-    } catch (const std::exception &e) {
-      FAIL() << "Failed with flow control " << static_cast<int>(flow) << ": "
-             << e.what();
+    }
+    catch (const std::exception& e)
+    {
+      FAIL() << "Failed with flow control " << static_cast<int>(flow) << ": " << e.what();
     }
   }
 }
 
-TEST_F(serial_serial_test, write_read_data_integrity) {
+TEST_F(serial_serial_test, write_read_data_integrity)
+{
   // Test various data patterns for integrity
   std::vector<std::vector<uint8_t>> test_patterns = {
       {0x00},                                           // Null byte
       {0xFF},                                           // All ones
       {0xAA, 0x55},                                     // Alternating pattern
       {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80}, // Powers of 2
-      std::vector<uint8_t>(256, 0x42), // Large repeated pattern
+      std::vector<uint8_t>(256, 0x42),                  // Large repeated pattern
   };
 
-  for (size_t i = 0; i < test_patterns.size(); ++i) {
-    const auto &pattern = test_patterns[i];
+  for (size_t i = 0; i < test_patterns.size(); ++i)
+  {
+    const auto& pattern = test_patterns[i];
 
     auto write_result = serial_.write_some(std::span{pattern});
-    EXPECT_EQ(write_result, pattern.size())
-        << "Pattern " << i << " write failed";
+    EXPECT_EQ(write_result, pattern.size()) << "Pattern " << i << " write failed";
 
     // Drain to ensure data is sent
     serial_.drain();
@@ -294,11 +313,13 @@ TEST_F(serial_serial_test, write_read_data_integrity) {
   }
 }
 
-TEST_F(serial_serial_test, large_buffer_operations) {
+TEST_F(serial_serial_test, large_buffer_operations)
+{
   // Test with increasingly larger buffers
   std::vector<size_t> buffer_sizes = {1, 16, 64, 256, 512, 1024, 2048, 4096};
 
-  for (auto size : buffer_sizes) {
+  for (auto size : buffer_sizes)
+  {
     std::vector<uint8_t> large_buffer(size);
     std::iota(large_buffer.begin(), large_buffer.end(), 0);
 
@@ -307,57 +328,55 @@ TEST_F(serial_serial_test, large_buffer_operations) {
     auto elapsed = std::chrono::steady_clock::now() - start;
 
     EXPECT_GT(result, 0u) << "Should write some data for size: " << size;
-    EXPECT_LE(result, size)
-        << "Should not write more than buffer size: " << size;
+    EXPECT_LE(result, size) << "Should not write more than buffer size: " << size;
 
-    auto elapsed_ms =
-        std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
-    EXPECT_LE(elapsed_ms, 5000)
-        << "Large write should complete within 5 seconds for size: " << size;
+    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+    EXPECT_LE(elapsed_ms, 5000) << "Large write should complete within 5 seconds for size: " << size;
   }
 }
 
-TEST_F(serial_serial_test, rapid_write_operations) {
+TEST_F(serial_serial_test, rapid_write_operations)
+{
   [[maybe_unused]] volatile std::uint8_t stack_guard[8] = {0};
   // Test rapid successive writes (hot path)
   std::array<uint8_t, 4> test_data = {0xDE, 0xAD, 0xBE, 0xEF};
 
   auto start = std::chrono::steady_clock::now();
 
-  for (int i = 0; i < 100; ++i) {
+  for (int i = 0; i < 100; ++i)
+  {
     auto result = serial_.write_some(std::span{test_data});
     EXPECT_EQ(result, test_data.size()) << "Rapid write " << i << " failed";
   }
 
   auto elapsed = std::chrono::steady_clock::now() - start;
-  auto elapsed_ms =
-      std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+  auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
 
-  EXPECT_LE(elapsed_ms, 2000)
-      << "100 rapid writes should complete within 2 seconds";
+  EXPECT_LE(elapsed_ms, 2000) << "100 rapid writes should complete within 2 seconds";
 }
 
-TEST_F(serial_serial_test, rapid_read_operations) {
+TEST_F(serial_serial_test, rapid_read_operations)
+{
   // Test rapid successive reads
   std::array<uint8_t, 16> read_buffer;
 
   auto start = std::chrono::steady_clock::now();
 
-  for (int i = 0; i < 100; ++i) {
+  for (int i = 0; i < 100; ++i)
+  {
     auto result = serial_.read_some(std::span{read_buffer});
     EXPECT_GE(result, 0u) << "Rapid read " << i << " failed";
     // Non-blocking reads will likely return 0, which is expected
   }
 
   auto elapsed = std::chrono::steady_clock::now() - start;
-  auto elapsed_ms =
-      std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+  auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
 
-  EXPECT_LE(elapsed_ms, 1000)
-      << "100 rapid reads should complete within 1 second";
+  EXPECT_LE(elapsed_ms, 1000) << "100 rapid reads should complete within 1 second";
 }
 
-TEST_F(serial_serial_test, varied_timeout) {
+TEST_F(serial_serial_test, varied_timeout)
+{
   std::array<uint8_t, 8> buffer;
 
   // Test various timeout values
@@ -369,34 +388,38 @@ TEST_F(serial_serial_test, varied_timeout) {
       std::chrono::milliseconds{500}, // Long
   };
 
-  for (auto timeout : timeouts) {
+  for (auto timeout : timeouts)
+  {
     auto start = std::chrono::steady_clock::now();
     auto result = serial_.read_exact(std::span{buffer}, timeout);
     auto elapsed = std::chrono::steady_clock::now() - start;
 
-    EXPECT_GE(result, 0u) << "read_exact should complete for timeout: "
-                          << timeout.count() << "ms";
+    EXPECT_GE(result, 0u) << "read_exact should complete for timeout: " << timeout.count() << "ms";
 
-    auto elapsed_ms =
-        std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
 
-    if (timeout.count() > 0) {
+    if (timeout.count() > 0)
+    {
       // Should timeout around the specified time (with some tolerance)
-      EXPECT_LE(elapsed_ms, timeout.count() + 200)
-          << "Timeout should be respected for: " << timeout.count() << "ms";
-    } else {
+      EXPECT_LE(elapsed_ms, timeout.count() + 200) << "Timeout should be respected for: " << timeout.count() << "ms";
+    }
+    else
+    {
       // Zero timeout should return immediately
       EXPECT_LE(elapsed_ms, 50) << "Zero timeout should return immediately";
     }
   }
 }
 
-TEST_F(serial_serial_test, error_recovery_scenarios) {
-  for (int i = 0; i < 5; ++i) {
+TEST_F(serial_serial_test, error_recovery_scenarios)
+{
+  for (int i = 0; i < 5; ++i)
+  {
     serial_.close();
     EXPECT_FALSE(serial_.is_open()) << "Port should be closed";
 
-    try {
+    try
+    {
       serial_.open("/dev/ttyAMA0");
       EXPECT_TRUE(serial_.is_open()) << "Port should reopen successfully";
 
@@ -404,13 +427,16 @@ TEST_F(serial_serial_test, error_recovery_scenarios) {
       std::array<uint8_t, 2> test_data = {0x12, 0x34};
       auto result = serial_.write_some(std::span{test_data});
       EXPECT_EQ(result, test_data.size()) << "Should work after reopen " << i;
-    } catch (const std::exception &e) {
+    }
+    catch (const std::exception& e)
+    {
       FAIL() << "Recovery attempt " << i << " failed: " << e.what();
     }
   }
 }
 
-TEST_F(serial_serial_test, boundary_conditions) {
+TEST_F(serial_serial_test, boundary_conditions)
+{
   [[maybe_unused]] volatile std::uint8_t stack_guard[8] = {0};
   // Test boundary conditions
 
@@ -434,7 +460,8 @@ TEST_F(serial_serial_test, boundary_conditions) {
   EXPECT_GE(single_read_result, 0u) << "Single byte read should work";
 }
 
-TEST_F(serial_serial_test, performance_benchmarks) {
+TEST_F(serial_serial_test, performance_benchmarks)
+{
   // Basic performance benchmarks for hot paths
   // Reduced iterations for serial ports without hardware loopback (buffer fills
   // up)
@@ -446,53 +473,37 @@ TEST_F(serial_serial_test, performance_benchmarks) {
   // Note: 32 bytes at 57600 baud ≈ 4.4ms minimum + OS overhead, so use
   // realistic timeout
   auto sync_write_start = std::chrono::high_resolution_clock::now();
-  for (size_t i = 0; i < iterations; ++i) {
-    auto bytes_written = serial_.write_exact(std::span{benchmark_data},
-                                             std::chrono::milliseconds{200});
-    EXPECT_EQ(bytes_written, benchmark_data.size())
-        << "write_exact should complete full write";
+  for (size_t i = 0; i < iterations; ++i)
+  {
+    auto bytes_written = serial_.write_exact(std::span{benchmark_data}, std::chrono::milliseconds{200});
+    EXPECT_EQ(bytes_written, benchmark_data.size()) << "write_exact should complete full write";
     serial_.drain();
   }
   auto sync_write_end = std::chrono::high_resolution_clock::now();
 
-  auto sync_write_duration =
-      std::chrono::duration_cast<std::chrono::microseconds>(sync_write_end -
-                                                            sync_write_start)
-          .count();
+  auto sync_write_duration = std::chrono::duration_cast<std::chrono::microseconds>(sync_write_end - sync_write_start).count();
 
-  EXPECT_LT(sync_write_duration, 10000000)
-      << "50 sync writes should complete within 10 seconds";
+  EXPECT_LT(sync_write_duration, 10000000) << "50 sync writes should complete within 10 seconds";
 
   // Benchmark synchronous reads
   std::array<uint8_t, 32> read_buffer;
   auto sync_read_start = std::chrono::high_resolution_clock::now();
-  for (size_t i = 0; i < iterations; ++i) {
+  for (size_t i = 0; i < iterations; ++i)
+  {
     serial_.read_some(std::span{read_buffer});
   }
   auto sync_read_end = std::chrono::high_resolution_clock::now();
 
-  auto sync_read_duration =
-      std::chrono::duration_cast<std::chrono::microseconds>(sync_read_end -
-                                                            sync_read_start)
-          .count();
+  auto sync_read_duration = std::chrono::duration_cast<std::chrono::microseconds>(sync_read_end - sync_read_start).count();
 
-  EXPECT_LT(sync_read_duration, 1000000)
-      << "50 sync reads should complete within 1 second (non-blocking)";
+  EXPECT_LT(sync_read_duration, 1000000) << "50 sync reads should complete within 1 second (non-blocking)";
 
   // Use GoogleTest logging for performance metrics
   SCOPED_TRACE("Performance metrics:");
-  SCOPED_TRACE("Sync writes: " + std::to_string(sync_write_duration) +
-               " µs for " + std::to_string(iterations) + " operations");
-  SCOPED_TRACE("Sync reads: " + std::to_string(sync_read_duration) +
-               " µs for " + std::to_string(iterations) + " operations");
-  SCOPED_TRACE(
-      "Avg write: " +
-      std::to_string(sync_write_duration / static_cast<long>(iterations)) +
-      " µs per operation");
-  SCOPED_TRACE(
-      "Avg read: " +
-      std::to_string(sync_read_duration / static_cast<long>(iterations)) +
-      " µs per operation");
+  SCOPED_TRACE("Sync writes: " + std::to_string(sync_write_duration) + " µs for " + std::to_string(iterations) + " operations");
+  SCOPED_TRACE("Sync reads: " + std::to_string(sync_read_duration) + " µs for " + std::to_string(iterations) + " operations");
+  SCOPED_TRACE("Avg write: " + std::to_string(sync_write_duration / static_cast<long>(iterations)) + " µs per operation");
+  SCOPED_TRACE("Avg read: " + std::to_string(sync_read_duration / static_cast<long>(iterations)) + " µs per operation");
 }
 
 } // namespace carbio::integration_tests

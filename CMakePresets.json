@@ -7,110 +7,431 @@
   },
   "configurePresets": [
     {
-      "name": "base",
+      "name": "config-base",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "installDir": "${sourceDir}/install/${presetName}",
       "hidden": true
     },
-    { "name": "armv8", "toolchainFile": "${sourceDir}/cmake/Toolchains/toolchain-armv8.cmake" },
-    { "name": "armv8-debug", "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }, "inherits": ["base","armv8"] },
-    { "name": "armv8-release", "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }, "inherits": ["base","armv8"] },
-    { "name": "armv8-profile", "cacheVariables": { "CMAKE_BUILD_TYPE": "Profile" }, "inherits": ["base","armv8"] },
-    { "name": "armv8-asan", "cacheVariables": { "CMAKE_BUILD_TYPE": "ASan" }, "inherits": ["base","armv8"] },
-    { "name": "armv8-tsan", "cacheVariables": { "CMAKE_BUILD_TYPE": "TSan" }, "inherits": ["base","armv8"] },
-    { "name": "armv8-ubsan", "cacheVariables": { "CMAKE_BUILD_TYPE": "UBSan" }, "inherits": ["base","armv8"] },
-    { "name": "armv8-rtsan", "cacheVariables": { "CMAKE_BUILD_TYPE": "RTSan" }, "inherits": ["base","armv8"] }
+
+    { "name": "gcc", "toolchainFile": "${sourceDir}/cmake/Toolchains/toolchain-gcc.cmake", "hidden": true },
+
+    { "name": "debug", "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }, "hidden": true },
+    { "name": "release", "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }, "hidden": true },
+    { "name": "profile", "cacheVariables": { "CMAKE_BUILD_TYPE": "Profile" }, "hidden": true },
+    { "name": "asan", "cacheVariables": { "CMAKE_BUILD_TYPE": "ASan" }, "hidden": true },
+    { "name": "tsan", "cacheVariables": { "CMAKE_BUILD_TYPE": "TSan" }, "hidden": true },
+    { "name": "ubsan", "cacheVariables": { "CMAKE_BUILD_TYPE": "UBSan" }, "hidden": true },
+
+    { "name": "with-unit-tests", "cacheVariables": { "CARBIO_BUILD_UNIT_TESTS": "ON" }, "hidden": true },
+    { "name": "with-integ-tests", "cacheVariables": { "CARBIO_BUILD_INTEG_TESTS": "ON" }, "hidden": true },
+    { "name": "with-perf-tests", "cacheVariables": { "CARBIO_BUILD_PERF_TESTS": "ON" }, "hidden": true },
+    { "name": "with-gui", "cacheVariables": { "CARBIO_BUILD_GUI": "ON" }, "hidden": true },
+    { "name": "with-nogui", "cacheVariables": { "CARBIO_BUILD_GUI": "OFF" }, "hidden": true },
+
+    { "name": "full", "inherits": ["with-unit-tests", "with-integ-tests", "with-gui"], "hidden": true },
+    { "name": "full-notest", "inherits": ["with-gui"], "hidden": true },
+    { "name": "minimal", "inherits": ["with-unit-tests", "with-integ-tests", "with-nogui"], "hidden": true },
+    { "name": "minimal-notest", "inherits": ["with-nogui"], "hidden": true },
+    { "name": "performance", "inherits": ["with-perf-tests", "with-nogui"], "hidden": true },
+
+    { "name": "gcc-debug-full", "inherits": ["config-base","gcc","full","debug"]},
+    { "name": "gcc-debug-minimal", "inherits": ["config-base","gcc","minimal","debug"]},
+    { "name": "gcc-debug-full-notest", "inherits": ["config-base","gcc","full-notest","debug"]},
+    { "name": "gcc-debug-minimal-notest", "inherits": ["config-base","gcc","minimal-notest","debug"]},
+    { "name": "gcc-debug-perf", "inherits": ["config-base","gcc","performance","debug"]},
+    { "name": "gcc-release-full", "inherits": ["config-base","gcc","full","release"]},
+    { "name": "gcc-release-minimal", "inherits": ["config-base","gcc","minimal","release"]},
+    { "name": "gcc-release-full-notest", "inherits": ["config-base","gcc","full-notest","release"]},
+    { "name": "gcc-release-minimal-notest", "inherits": ["config-base","gcc","minimal-notest","release"]},
+    { "name": "gcc-release-perf", "inherits": ["config-base","gcc","performance","release"]},
+    { "name": "gcc-profile-full", "inherits": ["config-base","gcc","full","profile"]},
+    { "name": "gcc-profile-minimal", "inherits": ["config-base","gcc","minimal","profile"]},
+    { "name": "gcc-profile-full-notest", "inherits": ["config-base","gcc","full-notest","profile"]},
+    { "name": "gcc-profile-minimal-notest", "inherits": ["config-base","gcc","minimal-notest","profile"]},
+    { "name": "gcc-profile-perf", "inherits": ["config-base","gcc","performance","profile"]},
+    { "name": "gcc-asan-full", "inherits": ["config-base","gcc","full","asan"]},
+    { "name": "gcc-asan-minimal", "inherits": ["config-base","gcc","minimal","asan"]},
+    { "name": "gcc-asan-full-notest", "inherits": ["config-base","gcc","full-notest","asan"]},
+    { "name": "gcc-asan-minimal-notest", "inherits": ["config-base","gcc","minimal-notest","asan"]},
+    { "name": "gcc-asan-perf", "inherits": ["config-base","gcc","performance","asan"]},
+    { "name": "gcc-tsan-full", "inherits": ["config-base","gcc","full","tsan"]},
+    { "name": "gcc-tsan-minimal", "inherits": ["config-base","gcc","minimal","tsan"]},
+    { "name": "gcc-tsan-full-notest", "inherits": ["config-base","gcc","full-notest","tsan"]},
+    { "name": "gcc-tsan-minimal-notest", "inherits": ["config-base","gcc","minimal-notest","tsan"]},
+    { "name": "gcc-tsan-perf", "inherits": ["config-base","gcc","performance","tsan"]},
+    { "name": "gcc-ubsan-full", "inherits": ["config-base","gcc","full","ubsan"]},
+    { "name": "gcc-ubsan-minimal", "inherits": ["config-base","gcc","minimal","ubsan"]},
+    { "name": "gcc-ubsan-full-notest", "inherits": ["config-base","gcc","full-notest","ubsan"]},
+    { "name": "gcc-ubsan-minimal-notest", "inherits": ["config-base","gcc","minimal-notest","ubsan"]},
+    { "name": "gcc-ubsan-perf", "inherits": ["config-base","gcc","performance","ubsan"]}
   ],
   "buildPresets": [
-    { "name": "armv8-debug", "configurePreset": "armv8-debug" },
-    { "name": "armv8-release", "configurePreset": "armv8-release" },
-    { "name": "armv8-profile", "configurePreset": "armv8-profile" },
-    { "name": "armv8-asan", "configurePreset": "armv8-asan" },
-    { "name": "armv8-tsan", "configurePreset": "armv8-tsan" },
-    { "name": "armv8-ubsan", "configurePreset": "armv8-ubsan" },
-    { "name": "armv8-rtsan", "configurePreset": "armv8-rtsan" }
+    { "name": "gcc-debug-full", "configurePreset": "gcc-debug-full" },
+    { "name": "gcc-debug-minimal", "configurePreset": "gcc-debug-minimal" },
+    { "name": "gcc-debug-full-notest", "configurePreset": "gcc-debug-full-notest" },
+    { "name": "gcc-debug-minimal-notest", "configurePreset": "gcc-debug-minimal-notest" },
+    { "name": "gcc-debug-perf", "configurePreset": "gcc-debug-perf" },
+    { "name": "gcc-release-full", "configurePreset": "gcc-release-full" },
+    { "name": "gcc-release-minimal", "configurePreset": "gcc-release-minimal" },
+    { "name": "gcc-release-full-notest", "configurePreset": "gcc-release-full-notest" },
+    { "name": "gcc-release-minimal-notest", "configurePreset": "gcc-release-minimal-notest" },
+    { "name": "gcc-release-perf", "configurePreset": "gcc-release-perf" },
+    { "name": "gcc-profile-full", "configurePreset": "gcc-profile-full" },
+    { "name": "gcc-profile-minimal", "configurePreset": "gcc-profile-minimal" },
+    { "name": "gcc-profile-full-notest", "configurePreset": "gcc-profile-full-notest" },
+    { "name": "gcc-profile-minimal-notest", "configurePreset": "gcc-profile-minimal-notest" },
+    { "name": "gcc-profile-perf", "configurePreset": "gcc-profile-perf" },
+    { "name": "gcc-asan-full", "configurePreset": "gcc-asan-full" },
+    { "name": "gcc-asan-minimal", "configurePreset": "gcc-asan-minimal" },
+    { "name": "gcc-asan-full-notest", "configurePreset": "gcc-asan-full-notest" },
+    { "name": "gcc-asan-minimal-notest", "configurePreset": "gcc-asan-minimal-notest" },
+    { "name": "gcc-asan-perf", "configurePreset": "gcc-asan-perf" },
+    { "name": "gcc-tsan-full", "configurePreset": "gcc-tsan-full" },
+    { "name": "gcc-tsan-minimal", "configurePreset": "gcc-tsan-minimal" },
+    { "name": "gcc-tsan-full-notest", "configurePreset": "gcc-tsan-full-notest" },
+    { "name": "gcc-tsan-minimal-notest", "configurePreset": "gcc-tsan-minimal-notest" },
+    { "name": "gcc-tsan-perf", "configurePreset": "gcc-tsan-perf" },
+    { "name": "gcc-ubsan-full", "configurePreset": "gcc-ubsan-full" },
+    { "name": "gcc-ubsan-minimal", "configurePreset": "gcc-ubsan-minimal" },
+    { "name": "gcc-ubsan-full-notest", "configurePreset": "gcc-ubsan-full-notest" },
+    { "name": "gcc-ubsan-minimal-notest", "configurePreset": "gcc-ubsan-minimal-notest" },
+    { "name": "gcc-ubsan-perf", "configurePreset": "gcc-ubsan-perf" }
   ],
   "testPresets": [
-    { "name": "armv8-debug", "configurePreset": "armv8-debug" },
-    { "name": "armv8-release", "configurePreset": "armv8-release" },
-    { "name": "armv8-profile", "configurePreset": "armv8-profile" },
-    { "name": "armv8-asan", "configurePreset": "armv8-asan" },
-    { "name": "armv8-tsan", "configurePreset": "armv8-tsan" },
-    { "name": "armv8-ubsan", "configurePreset": "armv8-ubsan" },
-    { "name": "armv8-rtsan", "configurePreset": "armv8-rtsan" }
+    { "name": "test-base", "hidden": true, "output": { "verbosity": "verbose", "outputOnFailure": true } },
+    { "name": "gcc-debug-full", "configurePreset": "gcc-debug-full", "inherits":[ "test-base" ] },
+    { "name": "gcc-debug-minimal", "configurePreset": "gcc-debug-minimal", "inherits":[ "test-base" ] },
+    { "name": "gcc-debug-full-notest", "configurePreset": "gcc-debug-full-notest", "inherits":[ "test-base" ] },
+    { "name": "gcc-debug-minimal-notest", "configurePreset": "gcc-debug-minimal-notest", "inherits":[ "test-base" ] },
+    { "name": "gcc-debug-perf", "configurePreset": "gcc-debug-perf", "inherits":[ "test-base" ] },
+    { "name": "gcc-release-full", "configurePreset": "gcc-release-full", "inherits":[ "test-base" ] },
+    { "name": "gcc-release-minimal", "configurePreset": "gcc-release-minimal", "inherits":[ "test-base" ] },
+    { "name": "gcc-release-full-notest", "configurePreset": "gcc-release-full-notest", "inherits":[ "test-base" ] },
+    { "name": "gcc-release-minimal-notest", "configurePreset": "gcc-release-minimal-notest", "inherits":[ "test-base" ] },
+    { "name": "gcc-release-perf", "configurePreset": "gcc-release-perf", "inherits":[ "test-base" ] },
+    { "name": "gcc-profile-full", "configurePreset": "gcc-profile-full", "inherits":[ "test-base" ] },
+    { "name": "gcc-profile-minimal", "configurePreset": "gcc-profile-minimal", "inherits":[ "test-base" ] },
+    { "name": "gcc-profile-full-notest", "configurePreset": "gcc-profile-full-notest", "inherits":[ "test-base" ] },
+    { "name": "gcc-profile-minimal-notest", "configurePreset": "gcc-profile-minimal-notest", "inherits":[ "test-base" ] },
+    { "name": "gcc-profile-perf", "configurePreset": "gcc-profile-perf", "inherits":[ "test-base" ] },
+    { "name": "gcc-asan-full", "configurePreset": "gcc-asan-full", "inherits":[ "test-base" ] },
+    { "name": "gcc-asan-minimal", "configurePreset": "gcc-asan-minimal", "inherits":[ "test-base" ] },
+    { "name": "gcc-asan-full-notest", "configurePreset": "gcc-asan-full-notest", "inherits":[ "test-base" ] },
+    { "name": "gcc-asan-minimal-notest", "configurePreset": "gcc-asan-minimal-notest", "inherits":[ "test-base" ] },
+    { "name": "gcc-asan-perf", "configurePreset": "gcc-asan-perf", "inherits":[ "test-base" ] },
+    { "name": "gcc-tsan-full", "configurePreset": "gcc-tsan-full", "inherits":[ "test-base" ] },
+    { "name": "gcc-tsan-minimal", "configurePreset": "gcc-tsan-minimal", "inherits":[ "test-base" ] },
+    { "name": "gcc-tsan-full-notest", "configurePreset": "gcc-tsan-full-notest", "inherits":[ "test-base" ] },
+    { "name": "gcc-tsan-minimal-notest", "configurePreset": "gcc-tsan-minimal-notest", "inherits":[ "test-base" ] },
+    { "name": "gcc-tsan-perf", "configurePreset": "gcc-tsan-perf", "inherits":[ "test-base" ] },
+    { "name": "gcc-ubsan-full", "configurePreset": "gcc-ubsan-full", "inherits":[ "test-base" ] },
+    { "name": "gcc-ubsan-minimal", "configurePreset": "gcc-ubsan-minimal", "inherits":[ "test-base" ] },
+    { "name": "gcc-ubsan-full-notest", "configurePreset": "gcc-ubsan-full-notest", "inherits":[ "test-base" ] },
+    { "name": "gcc-ubsan-minimal-notest", "configurePreset": "gcc-ubsan-minimal-notest", "inherits":[ "test-base" ] },
+    { "name": "gcc-ubsan-perf", "configurePreset": "gcc-ubsan-perf", "inherits":[ "test-base" ] }
   ],
   "packagePresets": [
-    { "name": "armv8-debug", "configurePreset": "armv8-debug" },
-    { "name": "armv8-release", "configurePreset": "armv8-release" },
-    { "name": "armv8-profile", "configurePreset": "armv8-profile" },
-    { "name": "armv8-asan", "configurePreset": "armv8-asan" },
-    { "name": "armv8-tsan", "configurePreset": "armv8-tsan" },
-    { "name": "armv8-ubsan", "configurePreset": "armv8-ubsan" },
-    { "name": "armv8-rtsan", "configurePreset": "armv8-rtsan" }
+    { "name": "gcc-debug-full", "configurePreset": "gcc-debug-full" },
+    { "name": "gcc-debug-minimal", "configurePreset": "gcc-debug-minimal" },
+    { "name": "gcc-debug-full-notest", "configurePreset": "gcc-debug-full-notest" },
+    { "name": "gcc-debug-minimal-notest", "configurePreset": "gcc-debug-minimal-notest" },
+    { "name": "gcc-debug-perf", "configurePreset": "gcc-debug-perf" },
+    { "name": "gcc-release-full", "configurePreset": "gcc-release-full" },
+    { "name": "gcc-release-minimal", "configurePreset": "gcc-release-minimal" },
+    { "name": "gcc-release-full-notest", "configurePreset": "gcc-release-full-notest" },
+    { "name": "gcc-release-minimal-notest", "configurePreset": "gcc-release-minimal-notest" },
+    { "name": "gcc-release-perf", "configurePreset": "gcc-release-perf" },
+    { "name": "gcc-profile-full", "configurePreset": "gcc-profile-full" },
+    { "name": "gcc-profile-minimal", "configurePreset": "gcc-profile-minimal" },
+    { "name": "gcc-profile-full-notest", "configurePreset": "gcc-profile-full-notest" },
+    { "name": "gcc-profile-minimal-notest", "configurePreset": "gcc-profile-minimal-notest" },
+    { "name": "gcc-profile-perf", "configurePreset": "gcc-profile-perf" },
+    { "name": "gcc-asan-full", "configurePreset": "gcc-asan-full" },
+    { "name": "gcc-asan-minimal", "configurePreset": "gcc-asan-minimal" },
+    { "name": "gcc-asan-full-notest", "configurePreset": "gcc-asan-full-notest" },
+    { "name": "gcc-asan-minimal-notest", "configurePreset": "gcc-asan-minimal-notest" },
+    { "name": "gcc-asan-perf", "configurePreset": "gcc-asan-perf" },
+    { "name": "gcc-tsan-full", "configurePreset": "gcc-tsan-full" },
+    { "name": "gcc-tsan-minimal", "configurePreset": "gcc-tsan-minimal" },
+    { "name": "gcc-tsan-full-notest", "configurePreset": "gcc-tsan-full-notest" },
+    { "name": "gcc-tsan-minimal-notest", "configurePreset": "gcc-tsan-minimal-notest" },
+    { "name": "gcc-tsan-perf", "configurePreset": "gcc-tsan-perf" },
+    { "name": "gcc-ubsan-full", "configurePreset": "gcc-ubsan-full" },
+    { "name": "gcc-ubsan-minimal", "configurePreset": "gcc-ubsan-minimal" },
+    { "name": "gcc-ubsan-full-notest", "configurePreset": "gcc-ubsan-full-notest" },
+    { "name": "gcc-ubsan-minimal-notest", "configurePreset": "gcc-ubsan-minimal-notest" },
+    { "name": "gcc-ubsan-perf", "configurePreset": "gcc-ubsan-perf" }
   ],
   "workflowPresets": [
     {
-      "name": "armv8-debug",
+      "name": "gcc-debug-full",
       "steps": [
-        { "type": "configure", "name": "armv8-debug" },
-        { "type": "build", "name": "armv8-debug" },
-        { "type": "test", "name": "armv8-debug" },
-        { "type": "package", "name": "armv8-debug" }
+        { "type": "configure", "name": "gcc-debug-full" },
+        { "type": "build", "name": "gcc-debug-full" },
+        { "type": "test", "name": "gcc-debug-full" },
+        { "type": "package", "name": "gcc-debug-full" }
       ]
     },
     {
-      "name": "armv8-profile",
+      "name": "gcc-debug-minimal",
       "steps": [
-        { "type": "configure", "name": "armv8-profile" },
-        { "type": "build", "name": "armv8-profile" },
-        { "type": "test", "name": "armv8-profile" },
-        { "type": "package", "name": "armv8-profile" }
+        { "type": "configure", "name": "gcc-debug-minimal" },
+        { "type": "build", "name": "gcc-debug-minimal" },
+        { "type": "test", "name": "gcc-debug-minimal" },
+        { "type": "package", "name": "gcc-debug-minimal" }
       ]
     },
     {
-      "name": "armv8-release",
+      "name": "gcc-debug-full-notest",
       "steps": [
-        { "type": "configure", "name": "armv8-release" },
-        { "type": "build", "name": "armv8-release" },
-        { "type": "test", "name": "armv8-release" },
-        { "type": "package", "name": "armv8-release" }
+        { "type": "configure", "name": "gcc-debug-full-notest" },
+        { "type": "build", "name": "gcc-debug-full-notest" },
+        { "type": "test", "name": "gcc-debug-full-notest" },
+        { "type": "package", "name": "gcc-debug-full-notest" }
       ]
     },
     {
-      "name": "armv8-asan",
+      "name": "gcc-debug-minimal-notest",
       "steps": [
-        { "type": "configure", "name": "armv8-asan" },
-        { "type": "build", "name": "armv8-asan" },
-        { "type": "test", "name": "armv8-asan" },
-        { "type": "package", "name": "armv8-asan" }
+        { "type": "configure", "name": "gcc-debug-minimal-notest" },
+        { "type": "build", "name": "gcc-debug-minimal-notest" },
+        { "type": "test", "name": "gcc-debug-minimal-notest" },
+        { "type": "package", "name": "gcc-debug-minimal-notest" }
       ]
     },
     {
-      "name": "armv8-tsan",
+      "name": "gcc-debug-perf",
       "steps": [
-        { "type": "configure", "name": "armv8-tsan" },
-        { "type": "build", "name": "armv8-tsan" },
-        { "type": "test", "name": "armv8-tsan" },
-        { "type": "package", "name": "armv8-tsan" }
+        { "type": "configure", "name": "gcc-debug-perf" },
+        { "type": "build", "name": "gcc-debug-perf" },
+        { "type": "test", "name": "gcc-debug-perf" },
+        { "type": "package", "name": "gcc-debug-perf" }
       ]
     },
     {
-      "name": "armv8-ubsan",
+      "name": "gcc-release-full",
       "steps": [
-        { "type": "configure", "name": "armv8-ubsan" },
-        { "type": "build", "name": "armv8-ubsan" },
-        { "type": "test", "name": "armv8-ubsan" },
-        { "type": "package", "name": "armv8-ubsan" }
+        { "type": "configure", "name": "gcc-release-full" },
+        { "type": "build", "name": "gcc-release-full" },
+        { "type": "test", "name": "gcc-release-full" },
+        { "type": "package", "name": "gcc-release-full" }
       ]
     },
     {
-      "name": "armv8-rtsan",
+      "name": "gcc-release-minimal",
       "steps": [
-        { "type": "configure", "name": "armv8-rtsan" },
-        { "type": "build", "name": "armv8-rtsan" },
-        { "type": "test", "name": "armv8-rtsan" },
-        { "type": "package", "name": "armv8-rtsan" }
+        { "type": "configure", "name": "gcc-release-minimal" },
+        { "type": "build", "name": "gcc-release-minimal" },
+        { "type": "test", "name": "gcc-release-minimal" },
+        { "type": "package", "name": "gcc-release-minimal" }
+      ]
+    },
+    {
+      "name": "gcc-release-full-notest",
+      "steps": [
+        { "type": "configure", "name": "gcc-release-full-notest" },
+        { "type": "build", "name": "gcc-release-full-notest" },
+        { "type": "test", "name": "gcc-release-full-notest" },
+        { "type": "package", "name": "gcc-release-full-notest" }
+      ]
+    },
+    {
+      "name": "gcc-release-minimal-notest",
+      "steps": [
+        { "type": "configure", "name": "gcc-release-minimal-notest" },
+        { "type": "build", "name": "gcc-release-minimal-notest" },
+        { "type": "test", "name": "gcc-release-minimal-notest" },
+        { "type": "package", "name": "gcc-release-minimal-notest" }
+      ]
+    },
+    {
+      "name": "gcc-release-perf",
+      "steps": [
+        { "type": "configure", "name": "gcc-release-perf" },
+        { "type": "build", "name": "gcc-release-perf" },
+        { "type": "test", "name": "gcc-release-perf" },
+        { "type": "package", "name": "gcc-release-perf" }
+      ]
+    },
+    {
+      "name": "gcc-profile-full",
+      "steps": [
+        { "type": "configure", "name": "gcc-profile-full" },
+        { "type": "build", "name": "gcc-profile-full" },
+        { "type": "test", "name": "gcc-profile-full" },
+        { "type": "package", "name": "gcc-profile-full" }
+      ]
+    },
+    {
+      "name": "gcc-profile-minimal",
+      "steps": [
+        { "type": "configure", "name": "gcc-profile-minimal" },
+        { "type": "build", "name": "gcc-profile-minimal" },
+        { "type": "test", "name": "gcc-profile-minimal" },
+        { "type": "package", "name": "gcc-profile-minimal" }
+      ]
+    },
+    {
+      "name": "gcc-profile-full-notest",
+      "steps": [
+        { "type": "configure", "name": "gcc-profile-full-notest" },
+        { "type": "build", "name": "gcc-profile-full-notest" },
+        { "type": "test", "name": "gcc-profile-full-notest" },
+        { "type": "package", "name": "gcc-profile-full-notest" }
+      ]
+    },
+    {
+      "name": "gcc-profile-minimal-notest",
+      "steps": [
+        { "type": "configure", "name": "gcc-profile-minimal-notest" },
+        { "type": "build", "name": "gcc-profile-minimal-notest" },
+        { "type": "test", "name": "gcc-profile-minimal-notest" },
+        { "type": "package", "name": "gcc-profile-minimal-notest" }
+      ]
+    },
+    {
+      "name": "gcc-profile-perf",
+      "steps": [
+        { "type": "configure", "name": "gcc-profile-perf" },
+        { "type": "build", "name": "gcc-profile-perf" },
+        { "type": "test", "name": "gcc-profile-perf" },
+        { "type": "package", "name": "gcc-profile-perf" }
+      ]
+    },
+    {
+      "name": "gcc-asan-full",
+      "steps": [
+        { "type": "configure", "name": "gcc-asan-full" },
+        { "type": "build", "name": "gcc-asan-full" },
+        { "type": "test", "name": "gcc-asan-full" },
+        { "type": "package", "name": "gcc-asan-full" }
+      ]
+    },
+    {
+      "name": "gcc-asan-minimal",
+      "steps": [
+        { "type": "configure", "name": "gcc-asan-minimal" },
+        { "type": "build", "name": "gcc-asan-minimal" },
+        { "type": "test", "name": "gcc-asan-minimal" },
+        { "type": "package", "name": "gcc-asan-minimal" }
+      ]
+    },
+    {
+      "name": "gcc-asan-full-notest",
+      "steps": [
+        { "type": "configure", "name": "gcc-asan-full-notest" },
+        { "type": "build", "name": "gcc-asan-full-notest" },
+        { "type": "test", "name": "gcc-asan-full-notest" },
+        { "type": "package", "name": "gcc-asan-full-notest" }
+      ]
+    },
+    {
+      "name": "gcc-asan-minimal-notest",
+      "steps": [
+        { "type": "configure", "name": "gcc-asan-minimal-notest" },
+        { "type": "build", "name": "gcc-asan-minimal-notest" },
+        { "type": "test", "name": "gcc-asan-minimal-notest" },
+        { "type": "package", "name": "gcc-asan-minimal-notest" }
+      ]
+    },
+    {
+      "name": "gcc-asan-perf",
+      "steps": [
+        { "type": "configure", "name": "gcc-asan-perf" },
+        { "type": "build", "name": "gcc-asan-perf" },
+        { "type": "test", "name": "gcc-asan-perf" },
+        { "type": "package", "name": "gcc-asan-perf" }
+      ]
+    },
+    {
+      "name": "gcc-tsan-full",
+      "steps": [
+        { "type": "configure", "name": "gcc-tsan-full" },
+        { "type": "build", "name": "gcc-tsan-full" },
+        { "type": "test", "name": "gcc-tsan-full" },
+        { "type": "package", "name": "gcc-tsan-full" }
+      ]
+    },
+    {
+      "name": "gcc-tsan-minimal",
+      "steps": [
+        { "type": "configure", "name": "gcc-tsan-minimal" },
+        { "type": "build", "name": "gcc-tsan-minimal" },
+        { "type": "test", "name": "gcc-tsan-minimal" },
+        { "type": "package", "name": "gcc-tsan-minimal" }
+      ]
+    },
+    {
+      "name": "gcc-tsan-full-notest",
+      "steps": [
+        { "type": "configure", "name": "gcc-tsan-full-notest" },
+        { "type": "build", "name": "gcc-tsan-full-notest" },
+        { "type": "test", "name": "gcc-tsan-full-notest" },
+        { "type": "package", "name": "gcc-tsan-full-notest" }
+      ]
+    },
+    {
+      "name": "gcc-tsan-minimal-notest",
+      "steps": [
+        { "type": "configure", "name": "gcc-tsan-minimal-notest" },
+        { "type": "build", "name": "gcc-tsan-minimal-notest" },
+        { "type": "test", "name": "gcc-tsan-minimal-notest" },
+        { "type": "package", "name": "gcc-tsan-minimal-notest" }
+      ]
+    },
+    {
+      "name": "gcc-tsan-perf",
+      "steps": [
+        { "type": "configure", "name": "gcc-tsan-perf" },
+        { "type": "build", "name": "gcc-tsan-perf" },
+        { "type": "test", "name": "gcc-tsan-perf" },
+        { "type": "package", "name": "gcc-tsan-perf" }
+      ]
+    },
+    {
+      "name": "gcc-ubsan-full",
+      "steps": [
+        { "type": "configure", "name": "gcc-ubsan-full" },
+        { "type": "build", "name": "gcc-ubsan-full" },
+        { "type": "test", "name": "gcc-ubsan-full" },
+        { "type": "package", "name": "gcc-ubsan-full" }
+      ]
+    },
+    {
+      "name": "gcc-ubsan-minimal",
+      "steps": [
+        { "type": "configure", "name": "gcc-ubsan-minimal" },
+        { "type": "build", "name": "gcc-ubsan-minimal" },
+        { "type": "test", "name": "gcc-ubsan-minimal" },
+        { "type": "package", "name": "gcc-ubsan-minimal" }
+      ]
+    },
+    {
+      "name": "gcc-ubsan-full-notest",
+      "steps": [
+        { "type": "configure", "name": "gcc-ubsan-full-notest" },
+        { "type": "build", "name": "gcc-ubsan-full-notest" },
+        { "type": "test", "name": "gcc-ubsan-full-notest" },
+        { "type": "package", "name": "gcc-ubsan-full-notest" }
+      ]
+    },
+    {
+      "name": "gcc-ubsan-minimal-notest",
+      "steps": [
+        { "type": "configure", "name": "gcc-ubsan-minimal-notest" },
+        { "type": "build", "name": "gcc-ubsan-minimal-notest" },
+        { "type": "test", "name": "gcc-ubsan-minimal-notest" },
+        { "type": "package", "name": "gcc-ubsan-minimal-notest" }
+      ]
+    },
+    {
+      "name": "gcc-ubsan-perf",
+      "steps": [
+        { "type": "configure", "name": "gcc-ubsan-perf" },
+        { "type": "build", "name": "gcc-ubsan-perf" },
+        { "type": "test", "name": "gcc-ubsan-perf" },
+        { "type": "package", "name": "gcc-ubsan-perf" }
       ]
     }
   ]

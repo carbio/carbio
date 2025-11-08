@@ -6,8 +6,12 @@ add_executable(unit_tests)
 target_sources(unit_tests
   PRIVATE
   test_main.cpp
-  serial_port_mock.h
   serial_port_tests.cpp
+  protocol_handler_tests.cpp
+  packet_tests.cpp
+  command_serializer_tests.cpp
+  command_executor_tests.cpp
+  fingerprint_sensor_tests.cpp
 )
 
 target_include_directories(unit_tests
