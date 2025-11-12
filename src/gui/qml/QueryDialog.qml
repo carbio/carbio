@@ -227,9 +227,7 @@ Dialog {
         if (queryIdInput.text.length > 0) {
             var id = parseInt(queryIdInput.text)
             if (id >= 1 && id <= 127) {
-                console.log("Querying ID:", id)
                 controller.queryTemplate(id)
-                // Keep dialog open to show progress
             }
         }
     }

@@ -71,9 +71,9 @@ public:
   // construction & destruction
   fingerprint_sensor();
   ~fingerprint_sensor();
-  fingerprint_sensor(fingerprint_sensor&& other) noexcept = delete;
+  fingerprint_sensor(fingerprint_sensor&& other) noexcept = delete; // non-movable
   fingerprint_sensor& operator=(fingerprint_sensor&&) noexcept = delete;
-  fingerprint_sensor(fingerprint_sensor const&) = delete;
+  fingerprint_sensor(fingerprint_sensor const&) = delete; // non-copiable
   fingerprint_sensor& operator=(fingerprint_sensor const&) = delete;
 
   // --- connection management
@@ -125,25 +125,12 @@ public:
   result<std::array<std::uint8_t, 32>> read_notepad(std::uint8_t page_number) noexcept;
 
   // --- convenience ops
-  void_result enroll(std::uint16_t position, std::uint16_t sample_count = 12);
-
-  // Enroll with progress callback
-  // Callback signature: void(int current_sample, int total_samples, const char* message)
-  void_result enroll_with_progress(std::uint16_t position,
-                                    std::function<void(int, int, const char*)> callback,
-                                    std::uint16_t sample_count = 12);
-
-  result<match_query_info> verify(std::uint16_t position);
-  result<search_query_info> identify();
-
-  // Verify with progress callback
-  // Callback signature: void(int progress_percent, const char* message)
-  result<match_query_info> verify_with_progress(std::uint16_t position,
-                                                 std::function<void(int, const char*)> callback);
-
-  // Identify with progress callback
-  // Callback signature: void(int progress_percent, const char* message)
-  result<search_query_info> identify_with_progress(std::function<void(int, const char*)> callback);
+  void_result enroll(std::uint16_t position, std::uint16_t sample_count = 12) noexcept;
+  void_result enroll_with_progress(std::uint16_t position, std::function<void(int, int, const char*)> callback, std::uint16_t sample_count = 12) noexcept;
+  result<match_query_info> verify(std::uint16_t position, std::chrono::milliseconds timeout = std::chrono::milliseconds(2000)) noexcept;
+  result<match_query_info> verify_with_progress(std::uint16_t position, std::function<void(int, const char*)> callback, std::chrono::milliseconds timeout = std::chrono::milliseconds(2000)) noexcept;
+  result<search_query_info> identify(std::chrono::milliseconds timeout = std::chrono::milliseconds(2000)) noexcept;
+  result<search_query_info> identify_with_progress(std::function<void(int, const char*)> callback, std::chrono::milliseconds timeout = std::chrono::milliseconds(2000)) noexcept;
 
 private:
   // -- utility ops

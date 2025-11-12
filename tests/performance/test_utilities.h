@@ -33,6 +33,20 @@ bool is_hardware_available();
  */
 bool open_sensor(carbio::fingerprint_sensor& sensor);
 
+/**
+ * @brief Wait for finger to be placed on sensor
+ * @param timeout_deciseconds Maximum time to wait in deciseconds (default 150 = 15 seconds)
+ * @return true if finger detected within timeout
+ */
+bool wait_for_finger(int timeout_deciseconds = 150);
+
+/**
+ * @brief Create a fingerprint template and store it
+ * @param template_id ID where to store the template
+ * @return true if template created and stored successfully
+ */
+bool create_template(uint16_t template_id);
+
 //=============================================================================
 // RAII BENCHMARK TIMING GUARD - Automotive-grade implementation
 //=============================================================================
@@ -52,7 +66,6 @@ bool open_sensor(carbio::fingerprint_sensor& sensor);
  *   {
  *     benchmark_pause_guard pause(state);
  *     // I/O operations here (user interaction, file access)
- *     spdlog::info("Place finger on sensor");
  *   } // Timing automatically resumes here
  *
  *   // Timed benchmark code here

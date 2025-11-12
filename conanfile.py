@@ -14,6 +14,7 @@ class CarbioRecipe(ConanFile):
 
     def requirements(self):
         # Project dependencies
+        self.requires("gflags/2.2.2")
         self.requires("spdlog/1.15.3")
         # Test dependencies
         self.test_requires("gtest/1.16.0")

@@ -1,0 +1,52 @@
+# ============================================================================
+# Benchmark Suite .gitignore
+# ============================================================================
+
+# NEVER COMMIT
+# These files contain actual fingerprint templates and must stay private
+fingerprint_data/
+*.bin
+*.dat
+*.fpt
+*.template
+
+# Compiled binaries and object files
+arduino_port/*.o
+arduino_port/arduino_benchmark
+arduino_port/template_ops
+*.exe
+*.out
+*.so
+*.dylib
+
+# External dependencies (cloned repositories)
+# These should be fetched via setup_libraries.sh
+external/
+
+# Generated benchmark results
+# These can be regenerated and change with each run
+results/*.json
+results/*.md
+results/*.csv
+
+# Keep a baseline or example result (optional)
+# Uncomment if you want to track one baseline result:
+# !results/baseline_*.json
+# !results/baseline_*.md
+
+# Temporary files
+*.tmp
+*.log
+/tmp/
+*.swp
+*~
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Build artifacts
+build/
+dist/
+*.a

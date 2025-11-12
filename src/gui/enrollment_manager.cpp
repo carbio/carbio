@@ -32,187 +32,217 @@
  *********************************************************************/
 
 #include "enrollment_manager.h"
+
 #include "user_manager.h"
-#include <QDebug>
 
-EnrollmentManager::EnrollmentManager(carbio::TemplateMetadataStore *metadataStore,
-                                     UserManager *userManager,
-                                     QObject *parent)
-    : QObject(parent),
-      m_metadataStore(metadataStore),
-      m_userManager(userManager),
-      m_isEnrolling(false),
-      m_enrollmentStatus(""),
-      m_pending{-1, "", 0, false} {
+#ifndef SPDLOG_ACTIVE_LEVEL
+#  define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_INFO
+#endif
+#include <spdlog/spdlog.h>
+
+EnrollmentManager::EnrollmentManager(carbio::TemplateMetadataStore* metadataStore, UserManager* userManager, QObject* parent)
+    : QObject(parent)
+    , m_metadataStore(metadataStore)
+    , m_userManager(userManager)
+    , m_isEnrolling(false)
+    , m_enrollmentStatus("")
+    , m_pending{-1, "", 0, false}
+{
 }
 
-bool EnrollmentManager::startFirstBootEnrollment(const QString &userName, int roleType) {
-    qInfo() << "[EnrollmentMgr] First-boot enrollment requested for:" << userName;
+bool EnrollmentManager::startFirstBootEnrollment(const QString& userName, int roleType)
+{
+  SPDLOG_INFO("First-boot enrollment requested for: {}", userName.toStdString());
 
-    if (userName.isEmpty()) {
-        qWarning() << "[EnrollmentMgr] Cannot enroll with empty name";
-        emit enrollmentError("Name cannot be empty");
-        return false;
-    }
+  if (userName.isEmpty())
+  {
+    SPDLOG_WARN("Cannot enroll with empty name");
+    emit enrollmentError("Name cannot be empty");
+    return false;
+  }
 
-    if (m_isEnrolling) {
-        qWarning() << "[EnrollmentMgr] Enrollment already in progress";
-        emit enrollmentError("Enrollment already in progress");
-        return false;
-    }
+  if (m_isEnrolling)
+  {
+    SPDLOG_WARN("Enrollment already in progress");
+    emit enrollmentError("Enrollment already in progress");
+    return false;
+  }
 
-    // Reserve ID 0 for first user (Primary Owner)
-    int userId = 0;
+  // Reserve ID 0 for first user (Primary Owner)
+  int userId = 0;
 
-    // Store pending enrollment (user created ONLY on success)
-    m_pending.userId = userId;
-    m_pending.userName = userName;
-    m_pending.roleType = roleType;
-    m_pending.isFirstBoot = true;
+  // Store pending enrollment (user created ONLY on success)
+  m_pending.userId = userId;
+  m_pending.userName = userName;
+  m_pending.roleType = roleType;
+  m_pending.isFirstBoot = true;
 
-    setEnrolling(true);
-    setStatus("Initializing enrollment...");
+  setEnrolling(true);
+  setStatus("Initializing enrollment...");
 
-    qInfo() << "[EnrollmentMgr] Starting first-boot enrollment for ID:" << userId;
-    emit enrollmentRequested(userId);
+  SPDLOG_INFO("Starting first-boot enrollment for ID: {}", userId);
+  emit enrollmentRequested(userId);
 
-    return true;
+  return true;
 }
 
-bool EnrollmentManager::startEnrollment(int userId) {
-    qInfo() << "[EnrollmentMgr] Enrollment requested for existing user ID:" << userId;
+bool EnrollmentManager::startEnrollment(int userId)
+{
+  SPDLOG_INFO("Enrollment requested for existing user ID: {}", userId);
 
-    if (!validateEnrollmentRequest(userId)) {
-        return false;
-    }
+  if (!validateEnrollmentRequest(userId))
+  {
+    return false;
+  }
 
-    if (m_isEnrolling) {
-        qWarning() << "[EnrollmentMgr] Enrollment already in progress";
-        emit enrollmentError("Enrollment already in progress");
-        return false;
-    }
+  if (m_isEnrolling)
+  {
+    SPDLOG_WARN("Enrollment already in progress");
+    emit enrollmentError("Enrollment already in progress");
+    return false;
+  }
 
-    // Metadata state will be updated to ACTIVE on enrollment success
-    m_pending.userId = userId;
-    m_pending.isFirstBoot = false;
+  // Metadata state will be updated to ACTIVE on enrollment success
+  m_pending.userId = userId;
+  m_pending.isFirstBoot = false;
 
-    setEnrolling(true);
-    setStatus("Initializing enrollment...");
+  setEnrolling(true);
+  setStatus("Initializing enrollment...");
 
-    qInfo() << "[EnrollmentMgr] Starting enrollment for ID:" << userId;
-    emit enrollmentRequested(userId);
+  SPDLOG_INFO("Starting enrollment for ID: {}", userId);
+  emit enrollmentRequested(userId);
 
-    return true;
+  return true;
 }
 
-void EnrollmentManager::cancelEnrollment() {
-    if (!m_isEnrolling) {
-        qWarning() << "[EnrollmentMgr] No active enrollment to cancel";
-        return;
-    }
+void EnrollmentManager::cancelEnrollment()
+{
+  if (!m_isEnrolling)
+  {
+    SPDLOG_WARN("No active enrollment to cancel");
+    return;
+  }
 
-    qWarning() << "[EnrollmentMgr] Enrollment cancelled by user";
+  SPDLOG_WARN("Enrollment cancelled by user");
 
-    if (m_pending.isFirstBoot) {
-        qInfo() << "[EnrollmentMgr] First-boot enrollment cancelled for:" << m_pending.userName;
-    }
+  if (m_pending.isFirstBoot)
+  {
+    SPDLOG_INFO("First-boot enrollment cancelled for: {}", m_pending.userName.toStdString());
+  }
 
-    clearPendingEnrollment();
-    setEnrolling(false);
-    setStatus("Enrollment cancelled");
+  clearPendingEnrollment();
+  setEnrolling(false);
+  setStatus("Enrollment cancelled");
 
-    emit enrollmentCancelled();
+  emit enrollmentCancelled();
 }
 
-void EnrollmentManager::onEnrollmentComplete(int userId) {
-    qInfo() << "[EnrollmentMgr] Enrollment complete for user ID:" << userId;
+void EnrollmentManager::onEnrollmentComplete(int userId)
+{
+  SPDLOG_INFO("Enrollment complete for user ID: {}", userId);
 
-    if (!m_isEnrolling) {
-        qWarning() << "[EnrollmentMgr] Received completion but not enrolling";
-        return;
-    }
+  if (!m_isEnrolling)
+  {
+    SPDLOG_WARN("Received completion but not enrolling");
+    return;
+  }
 
-    // ATOMIC: Create user ONLY now that fingerprint is enrolled
-    if (m_pending.isFirstBoot) {
-        createUser();
-    }
+  // ATOMIC: Create user ONLY now that fingerprint is enrolled
+  if (m_pending.isFirstBoot)
+  {
+    createUser();
+  }
 
-    setEnrolling(false);
-    setStatus("Enrollment complete");
+  setEnrolling(false);
+  setStatus("Enrollment complete");
 
-    QString message = QString("User ID %1 enrolled successfully").arg(userId);
-    emit enrollmentSuccess(userId, message);
+  QString message = QString("User ID %1 enrolled successfully").arg(userId);
+  emit enrollmentSuccess(userId, message);
 
-    clearPendingEnrollment();
+  clearPendingEnrollment();
 }
 
-void EnrollmentManager::onEnrollmentFailed(const QString &error) {
-    qWarning() << "[EnrollmentMgr] Enrollment failed:" << error;
+void EnrollmentManager::onEnrollmentFailed(const QString& error)
+{
+  SPDLOG_WARN("Enrollment failed: {}", error.toStdString());
 
-    if (!m_isEnrolling) {
-        qWarning() << "[EnrollmentMgr] Received failure but not enrolling";
-        return;
-    }
+  if (!m_isEnrolling)
+  {
+    SPDLOG_WARN("Received failure but not enrolling");
+    return;
+  }
 
-    if (m_pending.isFirstBoot) {
-        qWarning() << "[EnrollmentMgr] First-boot enrollment failed for:" << m_pending.userName;
-    }
+  if (m_pending.isFirstBoot)
+  {
+    SPDLOG_WARN("First-boot enrollment failed for: {}", m_pending.userName.toStdString());
+  }
 
-    clearPendingEnrollment();
-    setEnrolling(false);
-    setStatus("Enrollment failed");
+  clearPendingEnrollment();
+  setEnrolling(false);
+  setStatus("Enrollment failed");
 
-    emit enrollmentError(error);
+  emit enrollmentError(error);
 }
 
-bool EnrollmentManager::validateEnrollmentRequest(int userId) {
-    // Notepad supports only IDs 0-15 (16 pages)
-    if (userId < 0 || userId > 15) {
-        qWarning() << "[EnrollmentMgr] Invalid user ID:" << userId;
-        emit enrollmentError("Invalid user ID. Notepad supports only IDs 0-15.");
-        return false;
-    }
+bool EnrollmentManager::validateEnrollmentRequest(int userId)
+{
+  // Notepad supports only IDs 0-15 (16 pages)
+  if (userId < 0 || userId > 15)
+  {
+    SPDLOG_WARN("Invalid user ID: {}", userId);
+    emit enrollmentError("Invalid user ID. Notepad supports only IDs 0-15.");
+    return false;
+  }
 
-    return true;
+  return true;
 }
 
-void EnrollmentManager::setEnrolling(bool enrolling) {
-    if (m_isEnrolling != enrolling) {
-        m_isEnrolling = enrolling;
-        emit isEnrollingChanged();
-    }
+void EnrollmentManager::setEnrolling(bool enrolling)
+{
+  if (m_isEnrolling != enrolling)
+  {
+    m_isEnrolling = enrolling;
+    emit isEnrollingChanged();
+  }
 }
 
-void EnrollmentManager::setStatus(const QString &status) {
-    if (m_enrollmentStatus != status) {
-        m_enrollmentStatus = status;
-        emit enrollmentStatusChanged();
-    }
+void EnrollmentManager::setStatus(const QString& status)
+{
+  if (m_enrollmentStatus != status)
+  {
+    m_enrollmentStatus = status;
+    emit enrollmentStatusChanged();
+  }
 }
 
-void EnrollmentManager::clearPendingEnrollment() {
-    m_pending.userId = -1;
-    m_pending.userName.clear();
-    m_pending.roleType = 0;
-    m_pending.isFirstBoot = false;
+void EnrollmentManager::clearPendingEnrollment()
+{
+  m_pending.userId = -1;
+  m_pending.userName.clear();
+  m_pending.roleType = 0;
+  m_pending.isFirstBoot = false;
 }
 
-void EnrollmentManager::createUser() {
-    qInfo() << "[EnrollmentMgr] Creating first-boot user:" << m_pending.userName
-            << "with role:" << m_pending.roleType;
+void EnrollmentManager::createUser()
+{
+  SPDLOG_INFO("Creating first-boot user: {} with role: {}", m_pending.userName.toStdString(), m_pending.roleType);
 
-    if (!m_userManager) {
-        qCritical() << "[EnrollmentMgr] CRITICAL: UserManager is null!";
-        return;
-    }
+  if (!m_userManager)
+  {
+    SPDLOG_ERROR("UserManager is null!");
+    return;
+  }
 
-    // Create user in UserManager (this will be written to notepad via userAdded signal)
-    int userId = m_userManager->addUser(m_pending.userName, m_pending.roleType);
+  // Create user in UserManager (this will be written to notepad via userAdded signal)
+  int userId = m_userManager->addUser(m_pending.userName, m_pending.roleType);
 
-    if (userId >= 0) {
-        qInfo() << "[EnrollmentMgr] First-boot user created successfully with ID:" << userId;
-        // Note: Metadata will be written to notepad automatically via Controller's signal handler
-    } else {
-        qWarning() << "[EnrollmentMgr] Failed to create user in UserManager";
-    }
+  if (userId >= 0)
+  {
+    SPDLOG_INFO("First-boot user created successfully with ID: {}", userId);
+    // Note: Metadata will be written to notepad automatically via Controller's signal handler
+  }
+  else
+  {
+    SPDLOG_WARN("Failed to create user in UserManager");
+  }
 }

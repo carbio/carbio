@@ -66,7 +66,6 @@ Rectangle {
             anchors.margins: 25
             spacing: 20
             
-            // FIXED: Title row with proper alignment
             Item {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 40
@@ -182,7 +181,6 @@ Rectangle {
                 }
             }
 
-            // FIXED: Template count display with proper alignment
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 50
@@ -639,7 +637,6 @@ Rectangle {
             id: configDialog
         }
         
-        // FIXED: MenuButton component with proper alignment
         component MenuButton: Rectangle {
             property string text: ""
             property string keyText: ""

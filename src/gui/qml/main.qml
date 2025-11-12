@@ -69,9 +69,8 @@ ApplicationWindow {
         sequence: "Ctrl+Shift+S"
         context: Qt.ApplicationShortcut
         onActivated: {
-            console.log("SERVICE MODE: Direct access to fingerprint setup (bypassing authentication)")
             fingerprintSetupDialog.open()
-            toast.show("⚠️ SERVICE MODE: Fingerprint setup opened without authentication", false)
+            toast.show("SERVICE MODE: Fingerprint setup opened without authentication", false)
         }
     }
 
@@ -913,9 +912,6 @@ ApplicationWindow {
                     authPrompt.showFailure(controller.failedAttempts)
                 }
                 function onLockoutExpired() {
-                    // Force binding refresh when lockout expires
-                    // This ensures failedAttempts is reset to 0 visually
-                    console.log("[main.qml] Lockout expired, failedAttempts should be:", controller.failedAttempts)
                 }
             }
         }

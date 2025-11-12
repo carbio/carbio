@@ -49,10 +49,10 @@ enum class command_code : std::uint8_t
   merge_model = 0x05,            /*!< merge feature points into template model */
   store_model = 0x06,            /*!< Store template model */
   load_model = 0x07,             /*!< Load template model */
-  upload_model = 0x08,           /*!< Upload template model */
-  download_model = 0x09,         /*!< Download template model */
-  upload_image = 0x0A,           /*!< Upload image */
-  download_image = 0x0B,         /*!< Download image */
+  upload_model = 0x09,           /*!< Upload template model (PC -> Sensor) */
+  download_model = 0x08,         /*!< Download template model (Sensor -> PC) */
+  upload_image = 0x0B,           /*!< Upload image (PC -> Sensor) */
+  download_image = 0x0A,         /*!< Download image (Sensor -> PC) */
   erase_model = 0x0C,            /*!< Erase template model */
   clear_database = 0x0D,         /*!< Erase database */
   write_system_parameter = 0x0E, /*!< Write system parameters */

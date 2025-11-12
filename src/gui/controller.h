@@ -67,18 +67,12 @@ class QThread;
 
 /**
  * @brief Main controller - coordinates between QML, managers, and sensor
- *
- * REFACTORED: Now follows Single Responsibility Principle
- * - Authentication logic → AuthenticationManager
- * - Enrollment logic → EnrollmentManager
- * - Persistence logic → Sensor notepad (flash memory)
- * - Controller is now a thin coordinator/facade
  */
 class Controller : public QObject
 {
   Q_OBJECT
 
-  // QML Properties (unchanged for backward compatibility)
+  // QML Properties
   Q_PROPERTY(int authState READ authState NOTIFY authStateChanged)
   Q_PROPERTY(int failedAttempts READ failedAttempts NOTIFY failedAttemptsChanged)
   Q_PROPERTY(int lockoutSeconds READ lockoutSeconds NOTIFY lockoutSecondsChanged)
@@ -100,7 +94,7 @@ public:
   explicit Controller(QObject* parent = nullptr);
   ~Controller() override;
 
-  // Property getters (delegate to managers)
+  // Property getters
   int authState() const;
   int failedAttempts() const;
   int lockoutSeconds() const;
@@ -171,7 +165,7 @@ public:
   Q_INVOKABLE void refreshTemplateCount();
 
 public slots:
-  // Sensor operations (unchanged)
+  // Sensor operations
   void identifyFingerprint();
   void verifyFingerprint(int id);
   void queryTemplate(int id);
@@ -248,7 +242,7 @@ private slots:
   void onNotepadWriteFailed(int pageNumber, const QString& error);
 
 private:
-  // Guard methods (DRY principle)
+  // Guard methods
   bool ensureSensorAvailable();
   bool ensureNotAuthenticating();
 
@@ -267,19 +261,18 @@ private:
   // Notepad processing
   void processNotepadData();
   void writeMetadataToNotepad(const carbio::TemplateMetadata& meta);
-  void clearAllNotepadPages();  // DRY - eliminates 3 duplicate loops
-  void readAllNotepadPages();   // DRY - eliminates duplicate code
+  void clearAllNotepadPages();
+  void readAllNotepadPages();
 
   // Hardware
   std::unique_ptr<carbio::fingerprint_sensor> m_sensor;
   bool m_sensorAvailable;
   bool m_sensorInitializing;
 
-  // Metadata store (must be first - used by all managers)
+  // Metadata store
   carbio::TemplateMetadataStore m_metadataStore;
 
-  // Managers (Single Responsibility Principle - using std::unique_ptr for RAII)
-  // Order matters: UserManager must come before EnrollmentManager
+  // Managers
   std::unique_ptr<AuthenticationManager> m_authManager;
   std::unique_ptr<UserManager> m_userManager;
   std::unique_ptr<EnrollmentManager> m_enrollmentManager;
@@ -296,13 +289,12 @@ private:
   bool m_isAdminMenuAccessible;
   int m_scanProgress;
 
-  // Notepad sync state (fixed 16 pages, 32 bytes each - stack allocated, zero heap)
+  // Notepad sync state
   std::array<std::array<uint8_t, 32>, 16> m_notepadCache;
   int m_notepadPagesRead;
   int m_notepadPagesToRead;
 
   // Polling interval - 50ms = 20Hz (industry standard for fingerprint sensors)
-  // Previous: 5ms = 200Hz was consuming 60% CPU on Raspberry Pi
   static constexpr int POLL_INTERVAL_MS = 50;
 };
 

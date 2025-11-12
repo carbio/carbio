@@ -40,12 +40,6 @@ Rectangle {
         if (authState === stateON) {
             authPromptHiding()
         }
-
-        // When returning from ALERT (lockout) to SCANNING, ensure visual state is clean
-        // This handles edge case where binding might not update immediately
-        if (authState === stateSCANNING) {
-            console.log("[AuthPrompt] Entering SCANNING state, failedAttempts =", failedAttempts)
-        }
     }
 
     // Visibility based on state
@@ -190,7 +184,4 @@ Rectangle {
         feedbackOverlay.attempts = attempts
         feedbackOverlay.show()
     }
-
-    // Lockout countdown is managed by C++ controller
-    // No QML timer needed - controller handles onLockoutTick()
 }

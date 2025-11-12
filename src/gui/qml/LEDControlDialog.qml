@@ -116,7 +116,6 @@ Dialog {
                 }
                 
                 onClicked: {
-                    console.log("LED ON")
                     controller.turnLedOn()
                     ledDialog.close()
                 }
@@ -193,7 +192,6 @@ Dialog {
                 }
                 
                 onClicked: {
-                    console.log("LED OFF")
                     controller.turnLedOff()
                     ledDialog.close()
                 }

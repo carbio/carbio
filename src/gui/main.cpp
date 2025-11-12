@@ -32,8 +32,8 @@
  *********************************************************************/
 
 #if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wstrict-overflow"
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wstrict-overflow"
 #endif
 
 #include <QGuiApplication>
@@ -41,17 +41,16 @@
 #include <QQmlContext>
 
 #if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic pop
+#  pragma GCC diagnostic pop
 #endif
 
 #include "controller.h"
 #include "radialbar.h"
+
 #include <spdlog/spdlog.h>
 
-int main(int argc, char *argv[]) {
-  spdlog::set_pattern("[%H:%M:%S %z] [%n] [%^---%L---%$] [thread %t] %v");
-  spdlog::set_level(spdlog::level::warn);
-
+int main(int argc, char* argv[])
+{
   // Prevent GTK3 platform theme plugin from loading (causes ASAN leaks)
   // Setting to empty triggers Qt's fallback which may still load GTK3
   // Instead, explicitly prevent desktop integration theme detection
@@ -73,21 +72,23 @@ int main(int argc, char *argv[]) {
   const QUrl url(QStringLiteral("qrc:/main.qml"));
   QObject::connect(
       &engine, &QQmlApplicationEngine::objectCreated, &app,
-      [url, &controller](QObject *obj, const QUrl &objUrl) {
-        if (!obj && url == objUrl) {
+      [url, &controller](QObject* obj, const QUrl& objUrl)
+      {
+        if (!obj && url == objUrl)
+        {
           QCoreApplication::exit(-1);
-        } else if (obj && url == objUrl) {
-          // Initialize sensor AFTER QML loads successfully
-          if (!controller.initializeSensor()) {
-            // qWarning() << "Sensor initialization failed - running in demo
-            // mode";
-          }
+        }
+        else if (obj && url == objUrl)
+        {
+          if (!controller.initializeSensor())
+            ;
         }
       },
       Qt::QueuedConnection);
   engine.load(url);
-  if (engine.rootObjects().isEmpty()) {
-    qCritical() << "Failed to load QML";
+  if (engine.rootObjects().isEmpty())
+  {
+    SPDLOG_ERROR("Failed to load QML");
     return -1;
   }
   return app.exec();

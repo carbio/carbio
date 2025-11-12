@@ -109,6 +109,8 @@ inline constexpr status_flag flag_for(status_code s)
     return sf::database;
   case sc::cannot_enter_low_power_mode:
     return sf::hardware | sf::transient;
+  case sc::device_busy:
+    return sf::hardware | sf::transient;
   case sc::hardware_fault:
   case sc::flash_write_error:
   case sc::illegal_device_register:

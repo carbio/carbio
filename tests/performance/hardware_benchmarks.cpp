@@ -1,656 +1,1171 @@
 /**********************************************************************
- * Project   : Vehicle access control through biometric authentication
+ * Project   : Vehicle access control through biometric
+ *             authentication
  * Author    : Rajmund Kail
  * Institute : Óbuda University
  * Faculty   : John von Neumann Faculty of Informatics
  * Dept.     : Computer Science Engineering
  * Year      : 2025
+ *
+ * License:
+ *   Permission is hereby granted, free of charge, to any person
+ *   obtaining a copy of this software and associated documentation
+ *   files (the "Software"), to deal in the Software without
+ *   restriction, including without limitation the rights to use,
+ *   copy, modify, merge, publish, distribute, sublicense, and/or
+ *   sell copies of the Software, subject to the following
+ *   conditions:
+ *
+ *   The above copyright notice and this permission notice shall
+ *   be included in all copies or substantial portions of the
+ *   Software.
+ *
+ * Disclaimer:
+ *   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
+ *   KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+ *   WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+ *   PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS
+ *   OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ *   OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+ *   OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+ *   SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *********************************************************************/
 
 #include "fingerprint/fingerprint_sensor.h"
 #include "test_utilities.h"
 #include <benchmark/benchmark.h>
+
+#ifndef SPDLOG_ACTIVE_LEVEL
+#  define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_INFO
+#endif
 #include <spdlog/spdlog.h>
 
-#include <algorithm>
 #include <chrono>
+#include <memory>
 #include <thread>
-#include <vector>
 
 namespace carbio::performance_tests
 {
 
-/**
- * @brief Hardware configuration for R30x sensor
- */
+static std::unique_ptr<carbio::fingerprint_sensor> g_sensor;
+static bool g_hardware_ready = false;
+static uint16_t g_test_id_1 = 50;
+static uint16_t g_test_id_2 = 51;
+
 struct hardware_config
 {
-  static constexpr const char* device_path = "/dev/ttyAMA0";     // Raspberry Pi UART
-  static constexpr const char* device_path_usb = "/dev/ttyUSB0"; // USB adapter fallback
-  static constexpr bool skip_if_unavailable = true;
+  static constexpr const char* device_path = "/dev/ttyAMA0";
+  static constexpr const char* device_path_usb = "/dev/ttyUSB0";
 };
 
-/**
- * @brief Check if real hardware is available (cached for performance)
- */
 bool is_hardware_available()
 {
-  static bool checked = false;
-  static bool available = false;
-
-  if (!checked)
-  {
-    fingerprint_sensor sensor;
-
-    // Try primary device
-    if (sensor.connect(hardware_config::device_path))
-    {
-      auto info = sensor.query_device_settings();
-      sensor.disconnect();
-      available = info.has_value();
-      checked = true;
-      return available;
-    }
-
-    // Try USB fallback
-    if (sensor.connect(hardware_config::device_path_usb))
-    {
-      auto info = sensor.query_device_settings();
-      sensor.disconnect();
-      available = info.has_value();
-      checked = true;
-      return available;
-    }
-
-    checked = true;
-    available = false;
-  }
-
-  return available;
+  return g_hardware_ready && g_sensor != nullptr;
 }
 
-/**
- * @brief Open sensor on any available device
- */
 bool open_sensor(fingerprint_sensor& sensor)
 {
-  if (sensor.connect(hardware_config::device_path))
+  if (sensor.is_connected()) return true;
+  return sensor.connect(hardware_config::device_path) || sensor.connect(hardware_config::device_path_usb);
+}
+
+bool wait_for_finger(int timeout_deciseconds)
+{
+  for (int retry = 0; retry < timeout_deciseconds; ++retry)
   {
-    return true;
-  }
-  if (sensor.connect(hardware_config::device_path_usb))
-  {
-    return true;
+    if (g_sensor->capture_image().has_value()) return true;
+    if (retry == 50) SPDLOG_INFO("  [10 seconds remaining...]");
+    else if (retry == 100) SPDLOG_INFO("  [5 seconds remaining...]");
+    else if (retry == 130) SPDLOG_INFO("  [2 seconds remaining...]");
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
   return false;
 }
 
-//=============================================================================
-// BENCHMARK FIXTURE - Shared sensor connection for all benchmarks
-//=============================================================================
+bool create_template(uint16_t template_id)
+{
+  for (int step = 0; step < 2; ++step)
+  {
+    SPDLOG_INFO("Step {}/2: Place finger (15 seconds)", step + 1);
+    if (!wait_for_finger(150))
+    {
+      SPDLOG_ERROR("Timeout waiting for finger");
+      return false;
+    }
+    SPDLOG_INFO("Image captured");
+    if (!g_sensor->extract_features(step + 1).has_value())
+    {
+      SPDLOG_ERROR("Failed to extract features");
+      return false;
+    }
+    if (step == 0)
+    {
+      SPDLOG_INFO("Remove finger and wait 2 seconds");
+      std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+    }
+  }
+  if (!g_sensor->merge_model().has_value())
+  {
+    SPDLOG_ERROR("Failed to create model");
+    return false;
+  }
+  if (!g_sensor->store_model(template_id).has_value())
+  {
+    SPDLOG_ERROR("Failed to store model at ID {}", template_id);
+    return false;
+  }
+  SPDLOG_INFO("Template {} created", template_id);
+  return true;
+}
 
-/**
- * @brief Benchmark fixture that maintains a single sensor connection
- *
- * PERFORMANCE OPTIMIZATION:
- * - Connection established once during SetUp (before all iterations)
- * - Shared across all benchmark iterations
- * - Disconnected once during TearDown (after all iterations)
- * - Eliminates 50-60ms connection overhead per benchmark
- *
- * SAFETY:
- * - Thread-safe: Only thread 0 manages the connection
- * - Exception-safe: RAII guarantees cleanup
- * - Skip on hardware failure
- */
 class SensorFixture : public benchmark::Fixture
 {
-protected:
-  fingerprint_sensor sensor;
-  bool hardware_ready = false;
-
 public:
-  void SetUp(const ::benchmark::State& state) override
+  void SetUp(const ::benchmark::State&) override
   {
-    // Only the first thread should set up the sensor
-    if (state.thread_index() == 0)
+    if (!g_hardware_ready || !g_sensor)
     {
-      if (is_hardware_available() && open_sensor(sensor))
-      {
-        hardware_ready = true;
-      }
+      SPDLOG_ERROR("Global sensor not ready");
     }
   }
-
-  void TearDown(const ::benchmark::State& state) override
-  {
-    // Only the first thread should tear down the sensor
-    if (state.thread_index() == 0 && hardware_ready)
-    {
-      sensor.disconnect();
-      hardware_ready = false;
-    }
-  }
+  void TearDown(const ::benchmark::State&) override {}
 };
 
-//=============================================================================
-// COMMAND LATENCY BENCHMARKS - Measure actual hardware response times
-//=============================================================================
-
-/**
- * @brief Benchmark actual image capture latency
- *
- * MEASURES: Wall-clock time from command to response
- * REQUIRES: Physical R30x sensor
- * INTERACTION: None (automated polling)
- */
-BENCHMARK_DEFINE_F(SensorFixture, BM_Hardware_CaptureImageLatency)(benchmark::State& state)
+BENCHMARK_DEFINE_F(SensorFixture, BM_CaptureImage)(benchmark::State& state)
 {
-  if (!hardware_ready)
-  {
-    state.SkipWithError("R30x sensor not available - connect hardware to run this benchmark");
-    return;
-  }
-
-  std::vector<double> latencies_ms;
-  int successful = 0;
-  int no_finger = 0;
-  int other_errors = 0;
-
-  for (auto _ : state)
-  {
-    auto start = std::chrono::high_resolution_clock::now();
-    auto result = sensor.capture_image();
-    auto end = std::chrono::high_resolution_clock::now();
-
-    double latency = std::chrono::duration<double, std::milli>(end - start).count();
-    latencies_ms.push_back(latency);
-
-    if (result.has_value())
-    {
-      successful++;
-    }
-    else if (result.error() == status_code::no_finger)
-    {
-      no_finger++;
-    }
-    else
-    {
-      other_errors++;
-    }
-  }
-
-  // Report percentiles (critical for automotive real-time requirements)
-  std::sort(latencies_ms.begin(), latencies_ms.end());
-  size_t n = latencies_ms.size();
-
-  state.counters["Latency_P50_ms"] = latencies_ms[n * 50 / 100];
-  state.counters["Latency_P95_ms"] = latencies_ms[n * 95 / 100];
-  state.counters["Latency_P99_ms"] = latencies_ms[n * 99 / 100];
-  state.counters["Latency_Min_ms"] = latencies_ms.front();
-  state.counters["Latency_Max_ms"] = latencies_ms.back();
-
-  state.counters["Successful"] = successful;
-  state.counters["NoFinger"] = no_finger;
-  state.counters["Errors"] = other_errors;
-  state.counters["SuccessRate"] = static_cast<double>(successful) / n;
-}
-BENCHMARK_REGISTER_F(SensorFixture, BM_Hardware_CaptureImageLatency)
-  ->Unit(benchmark::kMillisecond)
-  ->Iterations(100);
-
-/**
- * @brief Benchmark feature extraction latency
- *
- * PREREQUISITE: Must capture image first
- */
-BENCHMARK_DEFINE_F(SensorFixture, BM_Hardware_ExtractFeaturesLatency)(benchmark::State& state)
-{
-  if (!hardware_ready)
+  if (!g_hardware_ready)
   {
     state.SkipWithError("R30x sensor not available");
     return;
   }
 
-  // Prerequisite: capture one valid image
-  bool image_captured = false;
-  for (int retry = 0; retry < 50 && !image_captured; ++retry)
+  SPDLOG_INFO("Place finger ONCE (15 seconds)");
+  if (!wait_for_finger(150))
   {
-    if (sensor.capture_image().has_value())
+    state.SkipWithError("Timeout waiting for finger");
+    return;
+  }
+
+  auto captured_image = g_sensor->download_image();
+  if (!captured_image.has_value())
+  {
+    state.SkipWithError("Failed to download fingerprint image");
+    return;
+  }
+  SPDLOG_INFO("Fingerprint captured - remove finger now");
+
+  for (auto _ : state)
+  {
+    state.PauseTiming();
+    if (!g_sensor->upload_image(captured_image.value().as_span()).has_value())
     {
-      image_captured = true;
+      state.SkipWithError("Failed to upload image");
       break;
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  }
+    state.ResumeTiming();
 
-  if (!image_captured)
-  {
-    state.SkipWithError("Timeout waiting for finger - no image captured after 5 seconds");
-    return;
-  }
-
-  std::vector<double> latencies_ms;
-
-  for (auto _ : state)
-  {
     auto start = std::chrono::high_resolution_clock::now();
-    auto result = sensor.extract_features(1);
+    auto result = g_sensor->capture_image();
     auto end = std::chrono::high_resolution_clock::now();
 
-    double latency = std::chrono::duration<double, std::milli>(end - start).count();
-    latencies_ms.push_back(latency);
+    state.SetIterationTime(std::chrono::duration<double>(end - start).count());
+    benchmark::DoNotOptimize(result);
 
     if (!result.has_value())
     {
-      state.SkipWithError("Extract features failed");
-      return;
+      state.SkipWithError("Capture failed");
+      break;
     }
   }
-
-  std::sort(latencies_ms.begin(), latencies_ms.end());
-  size_t n = latencies_ms.size();
-
-  state.counters["Latency_P50_ms"] = latencies_ms[n / 2];
-  state.counters["Latency_P95_ms"] = latencies_ms[n * 95 / 100];
-  state.counters["Latency_P99_ms"] = latencies_ms[n * 99 / 100];
 }
-BENCHMARK_REGISTER_F(SensorFixture, BM_Hardware_ExtractFeaturesLatency)
+BENCHMARK_REGISTER_F(SensorFixture, BM_CaptureImage)
   ->Unit(benchmark::kMillisecond)
-  ->Iterations(50);
+  ->UseManualTime()
+  ->MinTime(5.0)
+  ->MinWarmUpTime(1.0);
 
-/**
- * @brief Benchmark model creation latency
- *
- * PREREQUISITE: Must have features in buffers 1 and 2
- */
-BENCHMARK_DEFINE_F(SensorFixture, BM_Hardware_CreateModelLatency)(benchmark::State& state)
+BENCHMARK_DEFINE_F(SensorFixture, BM_ExtractFeatures)(benchmark::State& state)
 {
-  if (!hardware_ready)
+  if (!g_hardware_ready)
   {
     state.SkipWithError("R30x sensor not available");
     return;
   }
 
-  // Pre-loop setup: Extract features to buffer 1 and 2 (timer hasn't started)
-  bool ready = false;
-  for (int attempt = 0; attempt < 2; ++attempt)
+  SPDLOG_INFO("Place finger ONCE (15 seconds)");
+  if (!wait_for_finger(150))
   {
-    // Wait for finger
-    bool captured = false;
-    for (int retry = 0; retry < 50; ++retry)
-    {
-      if (sensor.capture_image().has_value())
-      {
-        captured = true;
-        break;
-      }
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-
-    if (!captured)
-    {
-      state.SkipWithError("Timeout waiting for finger (5 seconds)");
-      return;
-    }
-
-    if (!sensor.extract_features(attempt + 1).has_value())
-    {
-      state.SkipWithError("Failed to extract features for prerequisite");
-      return;
-    }
-
-    if (attempt == 0)
-    {
-      // Wait for finger removal before second capture
-      std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    }
-    else
-    {
-      ready = true;
-    }
-  }
-
-  if (!ready)
-  {
-    state.SkipWithError("Failed to prepare buffers");
+    state.SkipWithError("Timeout waiting for finger");
     return;
   }
 
-  std::vector<double> latencies_ms;
+  auto captured_image = g_sensor->download_image();
+  if (!captured_image.has_value())
+  {
+    state.SkipWithError("Failed to download fingerprint image");
+    return;
+  }
+  SPDLOG_INFO("Fingerprint captured - remove finger now");
 
   for (auto _ : state)
   {
+    state.PauseTiming();
+    if (!g_sensor->upload_image(captured_image.value().as_span()).has_value())
+    {
+      state.SkipWithError("Failed to upload image");
+      break;
+    }
+    state.ResumeTiming();
+
     auto start = std::chrono::high_resolution_clock::now();
-    auto result = sensor.merge_model();
+    auto result = g_sensor->extract_features(1);
     auto end = std::chrono::high_resolution_clock::now();
 
-    double latency = std::chrono::duration<double, std::milli>(end - start).count();
-    latencies_ms.push_back(latency);
+    state.SetIterationTime(std::chrono::duration<double>(end - start).count());
+    benchmark::DoNotOptimize(result);
 
     if (!result.has_value())
     {
-      state.SkipWithError("Create model failed");
-      return;
+      state.SkipWithError("Extraction failed");
+      break;
     }
   }
-
-  std::sort(latencies_ms.begin(), latencies_ms.end());
-  size_t n = latencies_ms.size();
-
-  state.counters["Latency_P50_ms"] = latencies_ms[n / 2];
-  state.counters["Latency_P95_ms"] = latencies_ms[n * 95 / 100];
 }
-BENCHMARK_REGISTER_F(SensorFixture, BM_Hardware_CreateModelLatency)
+BENCHMARK_REGISTER_F(SensorFixture, BM_ExtractFeatures)
   ->Unit(benchmark::kMillisecond)
-  ->Iterations(20);
+  ->UseManualTime()
+  ->MinTime(5.0)
+  ->MinWarmUpTime(1.0);
 
-/**
- * @brief Benchmark template storage latency
- */
-BENCHMARK_DEFINE_F(SensorFixture, BM_Hardware_StoreModelLatency)(benchmark::State& state)
+BENCHMARK_DEFINE_F(SensorFixture, BM_MergeModel)(benchmark::State& state)
 {
-  if (!hardware_ready)
+  if (!g_hardware_ready)
   {
     state.SkipWithError("R30x sensor not available");
     return;
   }
 
-  // Pre-loop setup: Create a model to store (timer hasn't started)
-  for (int attempt = 0; attempt < 2; ++attempt)
+  SPDLOG_INFO("Place finger TWICE (2 captures)");
+  for (int step = 0; step < 2; ++step)
   {
-    bool captured = false;
-    for (int retry = 0; retry < 50; ++retry)
+    SPDLOG_INFO("Capture {}/2: Place finger (15 seconds)", step + 1);
+    if (!wait_for_finger(150))
     {
-      if (sensor.capture_image().has_value())
-      {
-        captured = true;
-        break;
-      }
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-
-    if (!captured)
-    {
-      state.SkipWithError("Timeout waiting for finger (5 seconds)");
+      state.SkipWithError("Timeout waiting for finger");
       return;
     }
-
-    if (!sensor.extract_features(attempt + 1).has_value())
+    if (!g_sensor->extract_features(step + 1).has_value())
     {
       state.SkipWithError("Failed to extract features");
       return;
     }
-
-    if (attempt == 0)
+    if (step == 0)
     {
-      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+      SPDLOG_INFO("Remove finger and wait 2 seconds");
+      std::this_thread::sleep_for(std::chrono::milliseconds(2000));
     }
   }
 
-  if (!sensor.merge_model().has_value())
+  auto template1 = g_sensor->download_model(1);
+  auto template2 = g_sensor->download_model(2);
+  if (!template1.has_value() || !template2.has_value())
   {
-    state.SkipWithError("Failed to create model");
+    state.SkipWithError("Failed to download templates");
     return;
   }
-
-  std::vector<double> latencies_ms;
-  uint16_t test_location = 200; // Use high IDs to avoid conflicts
+  SPDLOG_INFO("Templates captured - remove finger now");
 
   for (auto _ : state)
   {
+    state.PauseTiming();
+    if (!g_sensor->upload_model(template1.value().as_span(), 1).has_value() ||
+        !g_sensor->upload_model(template2.value().as_span(), 2).has_value())
+    {
+      state.SkipWithError("Failed to upload templates");
+      break;
+    }
+    state.ResumeTiming();
+
     auto start = std::chrono::high_resolution_clock::now();
-    auto result = sensor.store_model(test_location);
+    auto result = g_sensor->merge_model();
     auto end = std::chrono::high_resolution_clock::now();
 
-    double latency = std::chrono::duration<double, std::milli>(end - start).count();
-    latencies_ms.push_back(latency);
-
-    if (!result.has_value())
-    {
-      state.SkipWithError("Store model failed");
-      return;
-    }
-
-    test_location++;
-  }
-
-  std::sort(latencies_ms.begin(), latencies_ms.end());
-  size_t n = latencies_ms.size();
-
-  state.counters["Latency_P50_ms"] = latencies_ms[n / 2];
-  state.counters["Latency_P95_ms"] = latencies_ms[n * 95 / 100];
-
-  // Cleanup: erase test templates
-  for (uint16_t id = 200; id < test_location; ++id)
-  {
-    (void)sensor.erase_model(id, 1); // Suppress [[nodiscard]] warning
-  }
-}
-BENCHMARK_REGISTER_F(SensorFixture, BM_Hardware_StoreModelLatency)
-  ->Unit(benchmark::kMillisecond)
-  ->Iterations(10);
-
-/**
- * @brief Benchmark template loading latency
- */
-BENCHMARK_DEFINE_F(SensorFixture, BM_Hardware_LoadModelLatency)(benchmark::State& state)
-{
-  if (!hardware_ready)
-  {
-    state.SkipWithError("R30x sensor not available");
-    return;
-  }
-
-  // Pre-loop setup: Store a template at location 250 (timer hasn't started)
-  uint16_t test_id = 250;
-
-  // Create and store a test template
-  for (int attempt = 0; attempt < 2; ++attempt)
-  {
-    bool captured = false;
-    for (int retry = 0; retry < 50; ++retry)
-    {
-      if (sensor.capture_image().has_value())
-      {
-        captured = true;
-        break;
-      }
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-
-    if (!captured)
-    {
-      state.SkipWithError("Timeout waiting for finger (5 seconds)");
-      return;
-    }
-
-    if (!sensor.extract_features(attempt + 1).has_value())
-    {
-      state.SkipWithError("Failed to prepare test template");
-      return;
-    }
-
-    if (attempt == 0)
-    {
-      std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    }
-  }
-
-  if (!sensor.merge_model().has_value() || !sensor.store_model(test_id).has_value())
-  {
-    state.SkipWithError("Failed to store test template");
-    return;
-  }
-
-  std::vector<double> latencies_ms;
-
-  for (auto _ : state)
-  {
-    auto start = std::chrono::high_resolution_clock::now();
-    auto result = sensor.load_model(test_id, 2);
-    auto end = std::chrono::high_resolution_clock::now();
-
-    double latency = std::chrono::duration<double, std::milli>(end - start).count();
-    latencies_ms.push_back(latency);
-
-    if (!result.has_value())
-    {
-      state.SkipWithError("Load model failed");
-      return;
-    }
-  }
-
-  std::sort(latencies_ms.begin(), latencies_ms.end());
-  size_t n = latencies_ms.size();
-
-  state.counters["Latency_P50_ms"] = latencies_ms[n / 2];
-  state.counters["Latency_P95_ms"] = latencies_ms[n * 95 / 100];
-
-  // Cleanup
-  (void)sensor.erase_model(test_id, 1); // Suppress [[nodiscard]] warning
-}
-BENCHMARK_REGISTER_F(SensorFixture, BM_Hardware_LoadModelLatency)
-  ->Unit(benchmark::kMillisecond)
-  ->Iterations(50);
-
-/**
- * @brief Benchmark getting device settings
- */
-BENCHMARK_DEFINE_F(SensorFixture, BM_Hardware_GetDeviceSettingsLatency)(benchmark::State& state)
-{
-  if (!hardware_ready)
-  {
-    state.SkipWithError("R30x sensor not available");
-    return;
-  }
-
-  for (auto _ : state)
-  {
-    auto result = sensor.query_device_settings();
+    state.SetIterationTime(std::chrono::duration<double>(end - start).count());
     benchmark::DoNotOptimize(result);
 
     if (!result.has_value())
     {
-      state.SkipWithError("Failed to get device settings");
-      return;
+      state.SkipWithError("Merge failed");
+      break;
     }
   }
 }
-BENCHMARK_REGISTER_F(SensorFixture, BM_Hardware_GetDeviceSettingsLatency)
-  ->Unit(benchmark::kMicrosecond);
+BENCHMARK_REGISTER_F(SensorFixture, BM_MergeModel)
+  ->Unit(benchmark::kMillisecond)
+  ->UseManualTime()
+  ->MinTime(5.0)
+  ->MinWarmUpTime(1.0);
 
-/**
- * @brief Benchmark model count query
- */
-BENCHMARK_DEFINE_F(SensorFixture, BM_Hardware_ModelCountLatency)(benchmark::State& state)
+BENCHMARK_DEFINE_F(SensorFixture, BM_StoreModel)(benchmark::State& state)
 {
-  if (!hardware_ready)
+  if (!g_hardware_ready)
   {
     state.SkipWithError("R30x sensor not available");
     return;
   }
 
+  auto settings = g_sensor->query_device_settings();
+  uint16_t capacity = settings.has_value() ? settings->capacity : 150;
+  uint16_t start_id = (capacity > 120) ? 100 : 10;
+
+  if (!g_sensor->load_model(g_test_id_1, 1).has_value())
+  {
+    state.SkipWithError("Failed to load test template");
+    return;
+  }
+
+  auto template_data = g_sensor->download_model(1);
+  if (!template_data.has_value())
+  {
+    state.SkipWithError("Failed to download test template");
+    return;
+  }
+
+  uint16_t current_id = start_id;
+
   for (auto _ : state)
   {
-    auto result = sensor.model_count();
+    if (current_id >= capacity)
+    {
+      state.SkipWithError("Insufficient capacity");
+      break;
+    }
+
+    state.PauseTiming();
+    if (!g_sensor->upload_model(template_data.value().as_span(), 2).has_value())
+    {
+      state.SkipWithError("Failed to upload template");
+      break;
+    }
+    state.ResumeTiming();
+
+    auto start = std::chrono::high_resolution_clock::now();
+    auto result = g_sensor->store_model(current_id);
+    auto end = std::chrono::high_resolution_clock::now();
+
+    state.SetIterationTime(std::chrono::duration<double>(end - start).count());
     benchmark::DoNotOptimize(result);
 
     if (!result.has_value())
     {
-      state.SkipWithError("Failed to get model count");
-      return;
+      state.SkipWithError("Store failed");
+      break;
     }
+
+    state.PauseTiming();
+    g_sensor->erase_model(current_id, 1);
+    current_id++;
+    state.ResumeTiming();
   }
 }
-BENCHMARK_REGISTER_F(SensorFixture, BM_Hardware_ModelCountLatency)
-  ->Unit(benchmark::kMicrosecond);
+BENCHMARK_REGISTER_F(SensorFixture, BM_StoreModel)
+  ->Unit(benchmark::kMillisecond)
+  ->UseManualTime()
+  ->MinTime(5.0)
+  ->MinWarmUpTime(1.0);
 
-//=============================================================================
-// DATABASE OPERATION BENCHMARKS
-//=============================================================================
-
-/**
- * @brief Benchmark template erasure
- */
-BENCHMARK_DEFINE_F(SensorFixture, BM_Hardware_EraseModelLatency)(benchmark::State& state)
+BENCHMARK_DEFINE_F(SensorFixture, BM_LoadModel)(benchmark::State& state)
 {
-  if (!hardware_ready)
+  if (!g_hardware_ready)
   {
     state.SkipWithError("R30x sensor not available");
     return;
   }
 
-  // Pre-loop setup: Pre-populate templates to erase (timer hasn't started)
-  std::vector<uint16_t> test_ids;
-  for (uint16_t id = 220; id < 240; ++id)
+  for (auto _ : state)
   {
-    test_ids.push_back(id);
-  }
+    auto start = std::chrono::high_resolution_clock::now();
+    auto result = g_sensor->load_model(g_test_id_1, 2);
+    auto end = std::chrono::high_resolution_clock::now();
 
-  // Create test templates (simplified)
-  int templates_created = 0;
-  for (auto id : test_ids)
-  {
-    // Quick enrollment for testing
-    bool success = false;
-    for (int attempt = 0; attempt < 2 && !success; ++attempt)
+    state.SetIterationTime(std::chrono::duration<double>(end - start).count());
+    benchmark::DoNotOptimize(result);
+
+    if (!result.has_value())
     {
-      bool captured = false;
-      for (int retry = 0; retry < 20; ++retry)
-      {
-        if (sensor.capture_image().has_value())
-        {
-          captured = true;
-          break;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      }
-
-      if (!captured)
-      {
-        break;
-      }
-
-      if (sensor.extract_features(attempt + 1).has_value())
-      {
-        if (attempt == 0)
-        {
-          std::this_thread::sleep_for(std::chrono::milliseconds(300));
-        }
-        else
-        {
-          if (sensor.merge_model().has_value() && sensor.store_model(id).has_value())
-          {
-            success = true;
-            templates_created++;
-          }
-        }
-      }
+      state.SkipWithError("Load failed");
+      break;
     }
   }
+}
+BENCHMARK_REGISTER_F(SensorFixture, BM_LoadModel)
+  ->Unit(benchmark::kMillisecond)
+  ->UseManualTime()
+  ->MinTime(5.0)
+  ->MinWarmUpTime(1.0);
 
-  size_t erase_index = 0;
+BENCHMARK_DEFINE_F(SensorFixture, BM_SearchModel)(benchmark::State& state)
+{
+  if (!g_hardware_ready)
+  {
+    state.SkipWithError("R30x sensor not available");
+    return;
+  }
+
+  auto settings = g_sensor->query_device_settings();
+  uint16_t search_count = settings.has_value() ? settings->capacity : 150;
+
+  SPDLOG_INFO("Place finger ONCE (15 seconds)");
+  if (!wait_for_finger(150))
+  {
+    state.SkipWithError("Timeout waiting for finger");
+    return;
+  }
+
+  if (!g_sensor->extract_features(1).has_value())
+  {
+    state.SkipWithError("Failed to extract features");
+    return;
+  }
+
+  auto template_data = g_sensor->download_model(1);
+  if (!template_data.has_value())
+  {
+    state.SkipWithError("Failed to download template");
+    return;
+  }
+  SPDLOG_INFO("Template captured - remove finger now");
 
   for (auto _ : state)
   {
-    if (erase_index >= test_ids.size())
+    state.PauseTiming();
+    if (!g_sensor->upload_model(template_data.value().as_span(), 1).has_value())
     {
-      break; // Ran out of templates
+      state.SkipWithError("Failed to upload template");
+      break;
     }
+    state.ResumeTiming();
 
     auto start = std::chrono::high_resolution_clock::now();
-    auto result = sensor.erase_model(test_ids[erase_index], 1);
+    auto result = g_sensor->search_model(0, 1, search_count);
     auto end = std::chrono::high_resolution_clock::now();
 
-    double latency = std::chrono::duration<double, std::milli>(end - start).count();
-    state.counters["Latency_ms"] = latency;
+    state.SetIterationTime(std::chrono::duration<double>(end - start).count());
+    benchmark::DoNotOptimize(result);
 
-    erase_index++;
+    if (!result.has_value())
+    {
+      state.SkipWithError("Search failed");
+      break;
+    }
   }
 }
-BENCHMARK_REGISTER_F(SensorFixture, BM_Hardware_EraseModelLatency)
+BENCHMARK_REGISTER_F(SensorFixture, BM_SearchModel)
   ->Unit(benchmark::kMillisecond)
-  ->Iterations(10);
+  ->UseManualTime()
+  ->MinTime(5.0)
+  ->MinWarmUpTime(1.0);
+
+BENCHMARK_DEFINE_F(SensorFixture, BM_FastSearchModel)(benchmark::State& state)
+{
+  if (!g_hardware_ready)
+  {
+    state.SkipWithError("R30x sensor not available");
+    return;
+  }
+
+  auto settings = g_sensor->query_device_settings();
+  uint16_t search_count = settings.has_value() ? settings->capacity : 150;
+
+  SPDLOG_INFO("Place finger ONCE (15 seconds)");
+  if (!wait_for_finger(150))
+  {
+    state.SkipWithError("Timeout waiting for finger");
+    return;
+  }
+
+  if (!g_sensor->extract_features(1).has_value())
+  {
+    state.SkipWithError("Failed to extract features");
+    return;
+  }
+
+  auto template_data = g_sensor->download_model(1);
+  if (!template_data.has_value())
+  {
+    state.SkipWithError("Failed to download template");
+    return;
+  }
+  SPDLOG_INFO("Template captured - remove finger now");
+
+  for (auto _ : state)
+  {
+    state.PauseTiming();
+    if (!g_sensor->upload_model(template_data.value().as_span(), 1).has_value())
+    {
+      state.SkipWithError("Failed to upload template");
+      break;
+    }
+    state.ResumeTiming();
+
+    auto start = std::chrono::high_resolution_clock::now();
+    auto result = g_sensor->fast_search_model(0, 1, search_count);
+    auto end = std::chrono::high_resolution_clock::now();
+
+    state.SetIterationTime(std::chrono::duration<double>(end - start).count());
+    benchmark::DoNotOptimize(result);
+
+    if (!result.has_value())
+    {
+      state.SkipWithError("Fast search failed");
+      break;
+    }
+  }
+}
+BENCHMARK_REGISTER_F(SensorFixture, BM_FastSearchModel)
+  ->Unit(benchmark::kMillisecond)
+  ->UseManualTime()
+  ->MinTime(5.0)
+  ->MinWarmUpTime(1.0);
+
+BENCHMARK_DEFINE_F(SensorFixture, BM_MatchModel)(benchmark::State& state)
+{
+  if (!g_hardware_ready)
+  {
+    state.SkipWithError("R30x sensor not available");
+    return;
+  }
+
+  SPDLOG_INFO("Place finger TWICE (2 captures)");
+  for (int step = 0; step < 2; ++step)
+  {
+    SPDLOG_INFO("Capture {}/2: Place finger (15 seconds)", step + 1);
+    if (!wait_for_finger(150))
+    {
+      state.SkipWithError("Timeout waiting for finger");
+      return;
+    }
+    if (!g_sensor->extract_features(step + 1).has_value())
+    {
+      state.SkipWithError("Failed to extract features");
+      return;
+    }
+    if (step == 0)
+    {
+      SPDLOG_INFO("Remove finger and wait 2 seconds");
+      std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+    }
+  }
+
+  auto template1 = g_sensor->download_model(1);
+  auto template2 = g_sensor->download_model(2);
+  if (!template1.has_value() || !template2.has_value())
+  {
+    state.SkipWithError("Failed to download templates");
+    return;
+  }
+  SPDLOG_INFO("Templates captured - remove finger now");
+
+  for (auto _ : state)
+  {
+    state.PauseTiming();
+    if (!g_sensor->upload_model(template1.value().as_span(), 1).has_value() ||
+        !g_sensor->upload_model(template2.value().as_span(), 2).has_value())
+    {
+      state.SkipWithError("Failed to upload templates");
+      break;
+    }
+    state.ResumeTiming();
+
+    auto start = std::chrono::high_resolution_clock::now();
+    auto result = g_sensor->match_model();
+    auto end = std::chrono::high_resolution_clock::now();
+
+    state.SetIterationTime(std::chrono::duration<double>(end - start).count());
+    benchmark::DoNotOptimize(result);
+
+    if (!result.has_value())
+    {
+      state.SkipWithError("Match failed");
+      break;
+    }
+  }
+}
+BENCHMARK_REGISTER_F(SensorFixture, BM_MatchModel)
+  ->Unit(benchmark::kMillisecond)
+  ->UseManualTime()
+  ->MinTime(5.0)
+  ->MinWarmUpTime(1.0);
+
+BENCHMARK_DEFINE_F(SensorFixture, BM_QueryDeviceSettings)(benchmark::State& state)
+{
+  if (!g_hardware_ready)
+  {
+    state.SkipWithError("R30x sensor not available");
+    return;
+  }
+
+  for (auto _ : state)
+  {
+    auto start = std::chrono::high_resolution_clock::now();
+    auto result = g_sensor->query_device_settings();
+    auto end = std::chrono::high_resolution_clock::now();
+
+    state.SetIterationTime(std::chrono::duration<double>(end - start).count());
+    benchmark::DoNotOptimize(result);
+
+    if (!result.has_value())
+    {
+      state.SkipWithError("Query failed");
+      break;
+    }
+  }
+}
+BENCHMARK_REGISTER_F(SensorFixture, BM_QueryDeviceSettings)
+  ->Unit(benchmark::kMicrosecond)
+  ->UseManualTime()
+  ->MinTime(2.0)
+  ->MinWarmUpTime(0.5);
+
+BENCHMARK_DEFINE_F(SensorFixture, BM_ModelCount)(benchmark::State& state)
+{
+  if (!g_hardware_ready)
+  {
+    state.SkipWithError("R30x sensor not available");
+    return;
+  }
+
+  for (auto _ : state)
+  {
+    auto start = std::chrono::high_resolution_clock::now();
+    auto result = g_sensor->model_count();
+    auto end = std::chrono::high_resolution_clock::now();
+
+    state.SetIterationTime(std::chrono::duration<double>(end - start).count());
+    benchmark::DoNotOptimize(result);
+
+    if (!result.has_value())
+    {
+      state.SkipWithError("Count failed");
+      break;
+    }
+  }
+}
+BENCHMARK_REGISTER_F(SensorFixture, BM_ModelCount)
+  ->Unit(benchmark::kMicrosecond)
+  ->UseManualTime()
+  ->MinTime(2.0)
+  ->MinWarmUpTime(0.5);
+
+BENCHMARK_DEFINE_F(SensorFixture, BM_EraseModel)(benchmark::State& state)
+{
+  if (!g_hardware_ready)
+  {
+    state.SkipWithError("R30x sensor not available");
+    return;
+  }
+
+  auto settings = g_sensor->query_device_settings();
+  uint16_t capacity = settings.has_value() ? settings->capacity : 150;
+  if (capacity <= 30)
+  {
+    state.SkipWithError("Sensor capacity too small");
+    return;
+  }
+
+  uint16_t start_id = (capacity > 50) ? 20 : 15;
+
+  if (!g_sensor->load_model(g_test_id_1, 1).has_value())
+  {
+    state.SkipWithError("Failed to load test template");
+    return;
+  }
+
+  auto template_data = g_sensor->download_model(1);
+  if (!template_data.has_value())
+  {
+    state.SkipWithError("Failed to download test template");
+    return;
+  }
+
+  uint16_t current_id = start_id;
+
+  for (auto _ : state)
+  {
+    state.PauseTiming();
+    if (!g_sensor->upload_model(template_data.value().as_span(), 2).has_value())
+    {
+      state.SkipWithError("Failed to upload template");
+      break;
+    }
+    if (!g_sensor->store_model(current_id).has_value())
+    {
+      state.SkipWithError("Failed to create template for erasure");
+      break;
+    }
+    state.ResumeTiming();
+
+    auto start = std::chrono::high_resolution_clock::now();
+    auto result = g_sensor->erase_model(current_id, 1);
+    auto end = std::chrono::high_resolution_clock::now();
+
+    state.SetIterationTime(std::chrono::duration<double>(end - start).count());
+    benchmark::DoNotOptimize(result);
+
+    if (!result.has_value())
+    {
+      state.SkipWithError("Erase failed");
+      break;
+    }
+
+    current_id++;
+    if (current_id >= capacity) current_id = start_id;
+  }
+}
+BENCHMARK_REGISTER_F(SensorFixture, BM_EraseModel)
+  ->Unit(benchmark::kMillisecond)
+  ->UseManualTime()
+  ->MinTime(5.0)
+  ->MinWarmUpTime(1.0);
+
+BENCHMARK_DEFINE_F(SensorFixture, BM_DownloadModel)(benchmark::State& state)
+{
+  if (!g_hardware_ready)
+  {
+    state.SkipWithError("R30x sensor not available");
+    return;
+  }
+
+  if (!g_sensor->load_model(g_test_id_1, 1).has_value())
+  {
+    state.SkipWithError("Failed to load test template");
+    return;
+  }
+
+  for (auto _ : state)
+  {
+    auto start = std::chrono::high_resolution_clock::now();
+    auto result = g_sensor->download_model(1);
+    auto end = std::chrono::high_resolution_clock::now();
+
+    state.SetIterationTime(std::chrono::duration<double>(end - start).count());
+    benchmark::DoNotOptimize(result);
+
+    if (!result.has_value())
+    {
+      state.SkipWithError("Download failed");
+      break;
+    }
+  }
+}
+BENCHMARK_REGISTER_F(SensorFixture, BM_DownloadModel)
+  ->Unit(benchmark::kMillisecond)
+  ->UseManualTime()
+  ->MinTime(5.0)
+  ->MinWarmUpTime(1.0);
+
+BENCHMARK_DEFINE_F(SensorFixture, BM_UploadModel)(benchmark::State& state)
+{
+  if (!g_hardware_ready)
+  {
+    state.SkipWithError("R30x sensor not available");
+    return;
+  }
+
+  if (!g_sensor->load_model(g_test_id_1, 1).has_value())
+  {
+    state.SkipWithError("Failed to load test template");
+    return;
+  }
+
+  auto template_data = g_sensor->download_model(1);
+  if (!template_data.has_value())
+  {
+    state.SkipWithError("Failed to download test template");
+    return;
+  }
+
+  for (auto _ : state)
+  {
+    auto start = std::chrono::high_resolution_clock::now();
+    auto result = g_sensor->upload_model(template_data.value().as_span(), 2);
+    auto end = std::chrono::high_resolution_clock::now();
+
+    state.SetIterationTime(std::chrono::duration<double>(end - start).count());
+    benchmark::DoNotOptimize(result);
+
+    if (!result.has_value())
+    {
+      state.SkipWithError("Upload failed");
+      break;
+    }
+  }
+}
+BENCHMARK_REGISTER_F(SensorFixture, BM_UploadModel)
+  ->Unit(benchmark::kMillisecond)
+  ->UseManualTime()
+  ->MinTime(5.0)
+  ->MinWarmUpTime(1.0);
+
+BENCHMARK_DEFINE_F(SensorFixture, BM_DownloadImage)(benchmark::State& state)
+{
+  if (!g_hardware_ready)
+  {
+    state.SkipWithError("R30x sensor not available");
+    return;
+  }
+
+  SPDLOG_INFO("Place finger ONCE (15 seconds)");
+  if (!wait_for_finger(150))
+  {
+    state.SkipWithError("Timeout waiting for finger");
+    return;
+  }
+  SPDLOG_INFO("Fingerprint captured - remove finger now");
+
+  for (auto _ : state)
+  {
+    auto start = std::chrono::high_resolution_clock::now();
+    auto result = g_sensor->download_image();
+    auto end = std::chrono::high_resolution_clock::now();
+
+    state.SetIterationTime(std::chrono::duration<double>(end - start).count());
+    benchmark::DoNotOptimize(result);
+
+    if (!result.has_value())
+    {
+      state.SkipWithError("Download image failed");
+      break;
+    }
+  }
+}
+BENCHMARK_REGISTER_F(SensorFixture, BM_DownloadImage)
+  ->Unit(benchmark::kMillisecond)
+  ->UseManualTime()
+  ->MinTime(5.0)
+  ->MinWarmUpTime(1.0);
+
+BENCHMARK_DEFINE_F(SensorFixture, BM_UploadImage)(benchmark::State& state)
+{
+  if (!g_hardware_ready)
+  {
+    state.SkipWithError("R30x sensor not available");
+    return;
+  }
+
+  SPDLOG_INFO("Place finger ONCE (15 seconds)");
+  if (!wait_for_finger(150))
+  {
+    state.SkipWithError("Timeout waiting for finger");
+    return;
+  }
+
+  auto image = g_sensor->download_image();
+  if (!image.has_value())
+  {
+    state.SkipWithError("Failed to download image");
+    return;
+  }
+  SPDLOG_INFO("Fingerprint captured - remove finger now");
+
+  for (auto _ : state)
+  {
+    auto start = std::chrono::high_resolution_clock::now();
+    auto result = g_sensor->upload_image(image.value().as_span());
+    auto end = std::chrono::high_resolution_clock::now();
+
+    state.SetIterationTime(std::chrono::duration<double>(end - start).count());
+    benchmark::DoNotOptimize(result);
+
+    if (!result.has_value())
+    {
+      state.SkipWithError("Upload image failed");
+      break;
+    }
+  }
+}
+BENCHMARK_REGISTER_F(SensorFixture, BM_UploadImage)
+  ->Unit(benchmark::kMillisecond)
+  ->UseManualTime()
+  ->MinTime(5.0)
+  ->MinWarmUpTime(1.0);
+
+BENCHMARK_DEFINE_F(SensorFixture, BM_ReadIndexTable)(benchmark::State& state)
+{
+  if (!g_hardware_ready)
+  {
+    state.SkipWithError("R30x sensor not available");
+    return;
+  }
+
+  std::vector<uint8_t> buffer(32);
+
+  for (auto _ : state)
+  {
+    auto start = std::chrono::high_resolution_clock::now();
+    auto result = g_sensor->read_index_table(buffer);
+    auto end = std::chrono::high_resolution_clock::now();
+
+    state.SetIterationTime(std::chrono::duration<double>(end - start).count());
+    benchmark::DoNotOptimize(result);
+    benchmark::ClobberMemory();
+
+    if (!result.has_value())
+    {
+      state.SkipWithError("Read index table failed");
+      break;
+    }
+  }
+}
+BENCHMARK_REGISTER_F(SensorFixture, BM_ReadIndexTable)
+  ->Unit(benchmark::kMicrosecond)
+  ->UseManualTime()
+  ->MinTime(2.0)
+  ->MinWarmUpTime(0.5);
+
+BENCHMARK_DEFINE_F(SensorFixture, BM_WriteNotepad)(benchmark::State& state)
+{
+  if (!g_hardware_ready)
+  {
+    state.SkipWithError("R30x sensor not available");
+    return;
+  }
+
+  std::array<uint8_t, 32> data;
+  data.fill(0xAB);
+
+  for (auto _ : state)
+  {
+    auto start = std::chrono::high_resolution_clock::now();
+    auto result = g_sensor->write_notepad(0, data);
+    auto end = std::chrono::high_resolution_clock::now();
+
+    state.SetIterationTime(std::chrono::duration<double>(end - start).count());
+    benchmark::DoNotOptimize(result);
+
+    if (!result.has_value())
+    {
+      state.SkipWithError("Write notepad failed");
+      break;
+    }
+  }
+}
+BENCHMARK_REGISTER_F(SensorFixture, BM_WriteNotepad)
+  ->Unit(benchmark::kMicrosecond)
+  ->UseManualTime()
+  ->MinTime(2.0)
+  ->MinWarmUpTime(0.5);
+
+BENCHMARK_DEFINE_F(SensorFixture, BM_ReadNotepad)(benchmark::State& state)
+{
+  if (!g_hardware_ready)
+  {
+    state.SkipWithError("R30x sensor not available");
+    return;
+  }
+
+  for (auto _ : state)
+  {
+    auto start = std::chrono::high_resolution_clock::now();
+    auto result = g_sensor->read_notepad(0);
+    auto end = std::chrono::high_resolution_clock::now();
+
+    state.SetIterationTime(std::chrono::duration<double>(end - start).count());
+    benchmark::DoNotOptimize(result);
+
+    if (!result.has_value())
+    {
+      state.SkipWithError("Read notepad failed");
+      break;
+    }
+  }
+}
+BENCHMARK_REGISTER_F(SensorFixture, BM_ReadNotepad)
+  ->Unit(benchmark::kMicrosecond)
+  ->UseManualTime()
+  ->MinTime(2.0)
+  ->MinWarmUpTime(0.5);
+
+BENCHMARK_DEFINE_F(SensorFixture, BM_TurnLedOn)(benchmark::State& state)
+{
+  if (!g_hardware_ready)
+  {
+    state.SkipWithError("R30x sensor not available");
+    return;
+  }
+
+  for (auto _ : state)
+  {
+    auto start = std::chrono::high_resolution_clock::now();
+    auto result = g_sensor->turn_led_on();
+    auto end = std::chrono::high_resolution_clock::now();
+
+    state.SetIterationTime(std::chrono::duration<double>(end - start).count());
+    benchmark::DoNotOptimize(result);
+
+    if (!result.has_value())
+    {
+      state.SkipWithError("Turn LED on failed");
+      break;
+    }
+  }
+}
+BENCHMARK_REGISTER_F(SensorFixture, BM_TurnLedOn)
+  ->Unit(benchmark::kMicrosecond)
+  ->UseManualTime()
+  ->MinTime(2.0)
+  ->MinWarmUpTime(0.5);
+
+BENCHMARK_DEFINE_F(SensorFixture, BM_TurnLedOff)(benchmark::State& state)
+{
+  if (!g_hardware_ready)
+  {
+    state.SkipWithError("R30x sensor not available");
+    return;
+  }
+
+  for (auto _ : state)
+  {
+    auto start = std::chrono::high_resolution_clock::now();
+    auto result = g_sensor->turn_led_off();
+    auto end = std::chrono::high_resolution_clock::now();
+
+    state.SetIterationTime(std::chrono::duration<double>(end - start).count());
+    benchmark::DoNotOptimize(result);
+
+    if (!result.has_value())
+    {
+      state.SkipWithError("Turn LED off failed");
+      break;
+    }
+  }
+}
+BENCHMARK_REGISTER_F(SensorFixture, BM_TurnLedOff)
+  ->Unit(benchmark::kMicrosecond)
+  ->UseManualTime()
+  ->MinTime(2.0)
+  ->MinWarmUpTime(0.5);
+
+BENCHMARK_DEFINE_F(SensorFixture, BM_SetLedSetting)(benchmark::State& state)
+{
+  if (!g_hardware_ready)
+  {
+    state.SkipWithError("R30x sensor not available");
+    return;
+  }
+
+  for (auto _ : state)
+  {
+    auto start = std::chrono::high_resolution_clock::now();
+    auto result = g_sensor->set_led_setting(led_mode_setting::breathing, 128, led_color_setting::blue, 0);
+    auto end = std::chrono::high_resolution_clock::now();
+
+    state.SetIterationTime(std::chrono::duration<double>(end - start).count());
+    benchmark::DoNotOptimize(result);
+
+    if (!result.has_value())
+    {
+      state.SkipWithError("Set LED setting failed");
+      break;
+    }
+  }
+}
+BENCHMARK_REGISTER_F(SensorFixture, BM_SetLedSetting)
+  ->Unit(benchmark::kMicrosecond)
+  ->UseManualTime()
+  ->MinTime(2.0)
+  ->MinWarmUpTime(0.5);
+
+void initialize_hardware_benchmarks()
+{
+  SPDLOG_INFO("Hardware Benchmark Suite - R30x Fingerprint Sensor");
+  SPDLOG_INFO("Initializing global sensor");
+
+  g_sensor = std::make_unique<carbio::fingerprint_sensor>();
+
+  if (!open_sensor(*g_sensor))
+  {
+    SPDLOG_ERROR("Failed to connect to R30x sensor");
+    SPDLOG_ERROR("Check sensor is connected to /dev/ttyAMA0 or /dev/ttyUSB0");
+    g_hardware_ready = false;
+    g_sensor.reset();
+    return;
+  }
+
+  SPDLOG_INFO("Sensor connected");
+  g_hardware_ready = true;
+  spdlog::set_level(spdlog::level::info);
+
+  auto settings = g_sensor->query_device_settings();
+  if (settings.has_value())
+  {
+    uint16_t capacity = settings->capacity;
+    SPDLOG_INFO("Sensor capacity: {} templates", capacity);
+
+    if (capacity > 100) { g_test_id_1 = capacity / 2; g_test_id_2 = g_test_id_1 + 1; }
+    else if (capacity > 20) { g_test_id_1 = 10; g_test_id_2 = 11; }
+    else
+    {
+      SPDLOG_ERROR("Sensor capacity too small: {} - need at least 20", capacity);
+      g_hardware_ready = false;
+      g_sensor.reset();
+      return;
+    }
+  }
+
+  SPDLOG_INFO("Checking for existing test templates at IDs {} and {}", g_test_id_1, g_test_id_2);
+
+  if (g_sensor->load_model(g_test_id_1, 1).has_value())
+  {
+    SPDLOG_INFO("Template {} already exists", g_test_id_1);
+  }
+  else
+  {
+    SPDLOG_INFO("Creating test template {}", g_test_id_1);
+    if (!create_template(g_test_id_1))
+    {
+      SPDLOG_WARN("Failed to create template {} - some benchmarks may fail", g_test_id_1);
+    }
+  }
+
+  if (g_sensor->load_model(g_test_id_2, 1).has_value())
+  {
+    SPDLOG_INFO("Template {} already exists", g_test_id_2);
+  }
+  else
+  {
+    SPDLOG_INFO("Creating test template {}", g_test_id_2);
+    if (!create_template(g_test_id_2))
+    {
+      SPDLOG_WARN("Failed to create template {} - some benchmarks may fail", g_test_id_2);
+    }
+  }
+
+  SPDLOG_INFO("Test templates ready");
+  SPDLOG_INFO("Running benchmarks");
+  SPDLOG_INFO("");
+  SPDLOG_INFO("NOTE: This benchmark suite is NOT THREAD-SAFE");
+  SPDLOG_INFO("Do not use --benchmark_threads option");
+}
+
+void cleanup_hardware_benchmarks()
+{
+  if (!g_sensor || !g_hardware_ready) return;
+
+  SPDLOG_INFO("Cleaning up test templates");
+
+  g_sensor->erase_model(g_test_id_1, 1);
+  g_sensor->erase_model(g_test_id_2, 1);
+
+  for (uint16_t id = 15; id < 40; ++id) g_sensor->erase_model(id, 1);
+  for (uint16_t id = 100; id < 110; ++id) g_sensor->erase_model(id, 1);
+
+  SPDLOG_INFO("Disconnecting sensor");
+  g_sensor->disconnect();
+  g_sensor.reset();
+  g_hardware_ready = false;
+
+  SPDLOG_INFO("Benchmark suite complete");
+}
 
 } // namespace carbio::performance_tests

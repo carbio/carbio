@@ -407,15 +407,12 @@ Dialog {
         if (!canEnroll()) {
             return
         }
-
         var id = controller.userManager.addUser(nameInput.text.trim(), selectedRole)
         if (id < 0) {
             console.error("Failed to add user - no available IDs")
             return
         }
-
         assignedId = id
-        console.log("Enrolling:", nameInput.text, "as role", selectedRole, "with ID", id)
         controller.enrollFingerprint(id)
     }
 

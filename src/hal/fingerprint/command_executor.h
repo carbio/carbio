@@ -42,7 +42,6 @@
 #include "fingerprint/result.h"
 #include "io/serial_port.h"
 #include "utility/locked_buffer.h"
-#include <spdlog/spdlog.h>
 
 #include <chrono>
 #include <optional>
@@ -81,46 +80,34 @@ public:
   [[nodiscard]] typename command_traits<code>::response execute(typename command_traits<code>::request const& request) noexcept
   {
     // Flush any stale data
-    spdlog::debug("flush");
     serial_.flush();
 
     // Serialize request
-    spdlog::debug("serialize_request");
     auto request_data = serialize_request<code>(request);
 
     // Build command packet
-    spdlog::debug("construct_command_packet");
     auto cmd_packet_result = protocol_.construct_command_packet(code, request_data);
     if (!cmd_packet_result)
     {
-      spdlog::error("construct_command_packet failed: {}", static_cast<int>(cmd_packet_result.error()));
       return make_error(cmd_packet_result.error());
     }
 
     // Send packet
     auto const& cmd_packet = *cmd_packet_result;
-    spdlog::debug("write_exact size={}", cmd_packet.size());
     std::size_t written = serial_.write_exact(cmd_packet.as_span(), std::chrono::milliseconds(1000));
-    spdlog::debug("write_exact returned {}", written);
     if (written != cmd_packet.size())
     {
-      spdlog::error("write_exact failed: written={} != size={}", written, cmd_packet.size());
       return make_error(status_code::timeout);
     }
 
     // Wait for transmission to complete
-    spdlog::debug("drain");
     serial_.drain();
 
     // Receive response - read header first (using secure buffer)
-    spdlog::debug("allocate header_buffer");
     locked_buffer<std::uint8_t> header_buffer(packet::max_header_size);
-    spdlog::debug("read_exact header size={}", packet::max_header_size);
     std::size_t header_read = serial_.read_exact(header_buffer.as_span(), std::chrono::milliseconds(1000));
-    spdlog::debug("read_exact returned {}", header_read);
     if (header_read < packet::max_header_size)
     {
-      spdlog::error("header_read {} < max_header_size {}", header_read, packet::max_header_size);
       return make_error(status_code::frame_error);
     }
 

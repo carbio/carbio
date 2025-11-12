@@ -191,7 +191,6 @@ Dialog {
     
     function startClear() {
         if (confirmInput.text === "y") {
-            console.log("Clearing database")
             controller.clearDatabase()
             confirmInput.text = ""
             clearDialog.close()

@@ -31,14 +31,42 @@
  *********************************************************************/
 
 #include <benchmark/benchmark.h>
+#include <spdlog/spdlog.h>
 #include <iostream>
 
-int main(int argc, char** argv) {
+namespace carbio::performance_tests
+{
+// Forward declarations for hardware benchmark initialization
+void initialize_hardware_benchmarks();
+void cleanup_hardware_benchmarks();
+} // namespace carbio::performance_tests
+
+int main(int argc, char** argv)
+{
+  spdlog::flush_on(spdlog::level::info);
+  spdlog::flush_every(std::chrono::seconds(0));
+  spdlog::set_pattern("%v");
+
+  std::cout.setf(std::ios::unitbuf);
+  std::cerr.setf(std::ios::unitbuf);
+  std::setvbuf(stdout, nullptr, _IONBF, 0);
+  std::setvbuf(stderr, nullptr, _IONBF, 0);
+
+  spdlog::set_level(spdlog::level::warn);
+  carbio::performance_tests::initialize_hardware_benchmarks();
+
   ::benchmark::Initialize(&argc, argv);
-  if (::benchmark::ReportUnrecognizedArguments(argc, argv)) {
+  if (::benchmark::ReportUnrecognizedArguments(argc, argv))
+  {
+    carbio::performance_tests::cleanup_hardware_benchmarks();
     return 1;
   }
-  ::benchmark::RunSpecifiedBenchmarks();
+
+  int result = ::benchmark::RunSpecifiedBenchmarks();
   ::benchmark::Shutdown();
-  return 0;
+
+  // Cleanup hardware benchmarks global state
+  carbio::performance_tests::cleanup_hardware_benchmarks();
+
+  return result;
 }

@@ -430,12 +430,7 @@ Rectangle {
         function onOperationComplete(message) {
             // Check if this is the first enrollment completion
             if (message.includes("enrolled successfully") && controller.userManager.count === 1) {
-                console.log("First enrollment complete - starting authentication")
                 controller.resetFailedAttempts()
-
-                // Start authentication immediately
-                // The wizard will auto-hide via binding: visible = count === 0
-                // The lock screen will show via binding: visible = authState !== ON && count > 0
                 controller.startAuthentication()
             }
         }

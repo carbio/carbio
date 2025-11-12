@@ -62,6 +62,7 @@ enum class status_code : std::uint8_t
   database_clear_failed = 0x11,         /*!< Database clear failed. */
   cannot_enter_low_power_mode = 0x12,   /*!< Cannot enter low-power mode. */
   permission_denied = 0x13,             /*!< Permission denied. */
+  device_busy = 0x17,                   /*!< Device busy - sensor internal operation in progress. */
   invalid_image_format = 0x15,          /*!< Invalid or corrupt image format. */
   flash_write_error = 0x18,             /*!< Flash write error. */
   unknown_error = 0x19,                 /*!< Unknown error. */
@@ -126,6 +127,8 @@ inline constexpr const char* name(status_code status) noexcept
     return "cannot_enter_low_power_mode";
   case status_code::permission_denied:
     return "permission_denied";
+  case status_code::device_busy:
+    return "device_busy";
   case status_code::invalid_image_format:
     return "invalid_image_format";
   case status_code::flash_write_error:
@@ -206,6 +209,8 @@ inline constexpr const char* hex_string(status_code status) noexcept
     return "0x12";
   case status_code::permission_denied:
     return "0x13";
+  case status_code::device_busy:
+    return "0x17";
   case status_code::invalid_image_format:
     return "0x15";
   case status_code::flash_write_error:
@@ -286,6 +291,8 @@ inline constexpr const char* message(status_code status) noexcept
     return "cannot enter low power mode";
   case status_code::permission_denied:
     return "permission denied due to incorrect device password";
+  case status_code::device_busy:
+    return "device busy - sensor internal operation in progress";
   case status_code::invalid_image_format:
     return "invalid image format";
   case status_code::flash_write_error:

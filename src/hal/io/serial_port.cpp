@@ -33,7 +33,11 @@
 
 #include "io/serial_port.h"
 
+#ifndef SPDLOG_ACTIVE_LEVEL
+#  define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_INFO
+#endif
 #include <spdlog/spdlog.h>
+#include <spdlog/fmt/bin_to_hex.h>
 
 #include <fcntl.h>
 #include <sys/ioctl.h>
@@ -59,10 +63,10 @@ bool serial_port::is_open() const noexcept
 
 bool serial_port::open(const char* path) noexcept
 {
-  spdlog::info("opening port at {}", path);
+  SPDLOG_INFO("opening port at {}", path);
   if (is_open())
   {
-    spdlog::warn("port already open, closing port first");
+    SPDLOG_WARN("port already open, closing port first");
     close();
   }
 
@@ -70,14 +74,14 @@ bool serial_port::open(const char* path) noexcept
   handle_.reset(::open(path, O_RDWR | O_NOCTTY | O_NONBLOCK));
   if (!is_open())
   {
-    spdlog::error("could not open port {}: {}", path, strerror(errno));
+    SPDLOG_ERROR("could not open port {}: {}", path, strerror(errno));
     return false;
   }
 
   /* store current settings */
   if (::tcgetattr(handle_.get(), &oldtty_) != 0)
   {
-    spdlog::error("Failed to get port attributes: {}", strerror(errno));
+    SPDLOG_ERROR("Failed to get port attributes: {}", strerror(errno));
     close();
     return false;
   }
@@ -140,17 +144,17 @@ bool serial_port::open(const char* path) noexcept
   set_flow_control(flow_control::none);
 
   flush();
-  spdlog::info("port open at {}", path);
+  SPDLOG_INFO("port open at {}", path);
   return true;
 }
 
 bool serial_port::set_baud_rate(std::uint32_t baud) noexcept
 {
-  spdlog::info("setting baud rate {}", baud);
+  SPDLOG_INFO("setting baud rate {}", baud);
 
   if (!is_open())
   {
-    spdlog::warn("port not open");
+    SPDLOG_WARN("port not open");
     return false;
   }
 
@@ -195,34 +199,34 @@ bool serial_port::set_baud_rate(std::uint32_t baud) noexcept
   /* invalid */
   default:
   {
-    spdlog::error("non-standard posix baud-rate {}", baud);
+    SPDLOG_ERROR("non-standard posix baud-rate {}", baud);
     return false;
   }
   }
 
   if (0 != ::cfsetospeed(&newtty_, speed))
   {
-    spdlog::error("cfsetospeed({}, ...) failed: {}", baud, std::strerror(errno));
+    SPDLOG_ERROR("cfsetospeed({}, ...) failed: {}", baud, std::strerror(errno));
     return false;
   }
 
   if (0 != ::cfsetispeed(&newtty_, speed))
   {
-    spdlog::error("cfsetispeed({}, ...) failed: {}", baud, std::strerror(errno));
+    SPDLOG_ERROR("cfsetispeed({}, ...) failed: {}", baud, std::strerror(errno));
     return false;
   }
 
-  spdlog::info("baud rate set");
+  SPDLOG_INFO("baud rate set");
   return apply_port_settings();
 }
 
 bool serial_port::set_data_width(data_width data) noexcept
 {
-  spdlog::info("setting data width {}", static_cast<std::uint8_t>(data));
+  SPDLOG_INFO("setting data width {}", static_cast<std::uint8_t>(data));
 
   if (!is_open())
   {
-    spdlog::warn("port not open");
+    SPDLOG_WARN("port not open");
     return false;
   }
 
@@ -264,21 +268,21 @@ bool serial_port::set_data_width(data_width data) noexcept
   /* invalid */
   default:
   {
-    spdlog::error("data width is invalid");
+    SPDLOG_ERROR("data width is invalid");
     return false;
   }
   }
 
-  spdlog::info("data width is set");
+  SPDLOG_INFO("data width is set");
   return apply_port_settings();
 }
 
 bool serial_port::set_stop_width(stop_width stop) noexcept
 {
-  spdlog::info("setting stop width {}", static_cast<std::uint8_t>(stop));
+  SPDLOG_INFO("setting stop width {}", static_cast<std::uint8_t>(stop));
   if (!is_open())
   {
-    spdlog::warn("port not open");
+    SPDLOG_WARN("port not open");
     return false;
   }
 
@@ -302,22 +306,22 @@ bool serial_port::set_stop_width(stop_width stop) noexcept
   /* invalid */
   default:
   {
-    spdlog::error("stop width is invalid");
+    SPDLOG_ERROR("stop width is invalid");
     return false;
   }
   }
 
-  spdlog::info("stop width is set");
+  SPDLOG_INFO("stop width is set");
   return apply_port_settings();
 }
 
 bool serial_port::set_parity_mode(parity_mode parity) noexcept
 {
-  spdlog::info("setting parity mode {}", static_cast<std::uint8_t>(parity));
+  SPDLOG_INFO("setting parity mode {}", static_cast<std::uint8_t>(parity));
 
   if (!is_open())
   {
-    spdlog::warn("port not open");
+    SPDLOG_WARN("port not open");
     return false;
   }
 
@@ -352,22 +356,22 @@ bool serial_port::set_parity_mode(parity_mode parity) noexcept
   /* invalid */
   default:
   {
-    spdlog::error("parity mode is invalid");
+    SPDLOG_ERROR("parity mode is invalid");
     return false;
   }
   }
 
-  spdlog::info("parity mode is set");
+  SPDLOG_INFO("parity mode is set");
   return apply_port_settings();
 }
 
 bool serial_port::set_flow_control(flow_control flow) noexcept
 {
-  spdlog::info("setting flow control {}", static_cast<std::uint8_t>(flow));
+  SPDLOG_INFO("setting flow control {}", static_cast<std::uint8_t>(flow));
 
   if (!is_open())
   {
-    spdlog::warn("port not open");
+    SPDLOG_WARN("port not open");
     return false;
   }
 
@@ -409,43 +413,43 @@ bool serial_port::set_flow_control(flow_control flow) noexcept
   /* invalid */
   default:
   {
-    spdlog::error("flow control invalid");
+    SPDLOG_ERROR("flow control invalid");
     return false;
   }
   }
 
-  spdlog::info("flow control set");
+  SPDLOG_INFO("flow control set");
   return apply_port_settings();
 }
 
 // bool
 // serial_port::set_blocking(bool value) noexcept
 //{
-//   spdlog::info("setting blocking mode {}", value);
+//   SPDLOG_INFO("setting blocking mode {}", value);
 //   newtty_.c_cc[VTIME] = value; /* 0=nonblocking read, 1=blocking read  */
 //   newtty_.c_cc[VMIN]  = 1;
-//   spdlog::info("blocking mode set.");
+//   SPDLOG_INFO("blocking mode set.");
 //   return true;
 // }
 
 void serial_port::close() noexcept
 {
-  spdlog::info("closing port...");
+  SPDLOG_INFO("closing port...");
   if (!is_open())
   {
-    spdlog::warn("port not open");
+    SPDLOG_WARN("port not open");
     return;
   }
   ::tcsetattr(handle_.get(), TCSANOW, &oldtty_);
   handle_.reset();
-  spdlog::info("port closed");
+  SPDLOG_INFO("port closed");
 }
 
 std::size_t serial_port::write_some(std::span<const std::uint8_t> buffer) noexcept
 {
   if (!is_open())
   {
-    spdlog::warn("port not open");
+    SPDLOG_WARN("port not open");
     return 0;
   }
   ssize_t bytes_written = ::write(handle_.get(), buffer.data(), buffer.size());
@@ -453,15 +457,14 @@ std::size_t serial_port::write_some(std::span<const std::uint8_t> buffer) noexce
   {
     if (errno == EAGAIN)
     {
-      if (spdlog::should_log(spdlog::level::trace))
-        spdlog::trace("write would block");
+      SPDLOG_TRACE("write would block");
       return 0;
     }
-    spdlog::error("write failed {}", strerror(errno));
+    SPDLOG_ERROR("write failed {}", strerror(errno));
     return 0;
   }
-  if (spdlog::should_log(spdlog::level::trace))
-    spdlog::debug("written {} bytes", bytes_written);
+  SPDLOG_TRACE("written {} bytes: {}", bytes_written,
+               spdlog::to_hex(buffer.begin(), buffer.begin() + bytes_written));
   return std::max<std::size_t>(0, bytes_written);
 }
 
@@ -469,7 +472,7 @@ std::size_t serial_port::read_some(std::span<std::uint8_t> buffer) noexcept
 {
   if (!is_open())
   {
-    spdlog::warn("port not open");
+    SPDLOG_WARN("port not open");
     return 0;
   }
   const auto bytes_read = ::read(handle_.get(), buffer.data(), buffer.size());
@@ -477,15 +480,14 @@ std::size_t serial_port::read_some(std::span<std::uint8_t> buffer) noexcept
   {
     if (errno == EAGAIN)
     {
-      if (spdlog::should_log(spdlog::level::trace))
-        spdlog::trace("no data available");
+      SPDLOG_TRACE("no data available");
       return 0;
     }
-    spdlog::error("read failed {}", strerror(errno));
+    SPDLOG_ERROR("read failed {}", strerror(errno));
     return 0;
   }
-  if (spdlog::should_log(spdlog::level::trace))
-    spdlog::debug("read {} bytes", bytes_read);
+  SPDLOG_TRACE("read {} bytes: {}", bytes_read,
+               spdlog::to_hex(buffer.begin(), buffer.begin() + bytes_read));
   return std::max<std::size_t>(0, bytes_read);
 }
 
@@ -586,15 +588,15 @@ std::size_t serial_port::write_exact(std::span<const std::uint8_t> buffer, std::
 {
   if (!is_open())
   {
-    spdlog::warn("port not open");
+    SPDLOG_WARN("port not open");
     return 0;
   }
 
   const auto timeout_us = timeout.count() * 1000;
   const auto total_bytes = do_write_exact(handle_.get(), buffer, timeout_us);
 
-  if (spdlog::should_log(spdlog::level::trace))
-    spdlog::trace("write completed {}/{} bytes", total_bytes, buffer.size());
+  SPDLOG_TRACE("write completed {}/{} bytes: {}", total_bytes, buffer.size(),
+               spdlog::to_hex(buffer.begin(), buffer.begin() + total_bytes));
   return total_bytes;
 }
 
@@ -602,15 +604,15 @@ std::size_t serial_port::read_exact(std::span<std::uint8_t> buffer, std::chrono:
 {
   if (!is_open())
   {
-    spdlog::warn("port not open");
+    SPDLOG_WARN("port not open");
     return 0;
   }
 
   const auto timeout_us = timeout.count() * 1000;
   const auto total_bytes = do_read_exact(handle_.get(), buffer, timeout_us);
 
-  if (spdlog::should_log(spdlog::level::trace))
-    spdlog::trace("read completed {}/{} bytes", total_bytes, buffer.size());
+  SPDLOG_TRACE("read completed {}/{} bytes: {}", total_bytes, buffer.size(),
+               spdlog::to_hex(buffer.begin(), buffer.begin() + total_bytes));
   return total_bytes;
 }
 
@@ -618,83 +620,82 @@ std::size_t serial_port::available() const noexcept
 {
   if (!is_open())
   {
-    spdlog::warn("port not open");
+    SPDLOG_WARN("port not open");
     return 0;
   }
   int bytes = 0;
   ::ioctl(handle_.get(), FIONREAD, &bytes);
-  if (spdlog::should_log(spdlog::level::trace))
-    spdlog::trace("available {} bytes", bytes);
+  SPDLOG_TRACE("available {} bytes", bytes);
   return static_cast<std::size_t>(std::max(0, bytes));
 }
 
 void serial_port::flush() noexcept
 {
-  spdlog::trace("flushing...");
+  SPDLOG_TRACE("flushing...");
   if (!is_open())
   {
-    spdlog::warn("port not open");
+    SPDLOG_WARN("port not open");
     return;
   }
   ::tcflush(handle_.get(), TCIOFLUSH);
-  spdlog::trace("flushed");
+  SPDLOG_TRACE("flushed");
 }
 
 void serial_port::drain() noexcept
 {
-  spdlog::trace("draining...");
+  SPDLOG_TRACE("draining...");
   if (!is_open())
   {
-    spdlog::warn("port not open");
+    SPDLOG_WARN("port not open");
     return;
   }
   ::tcdrain(handle_.get());
-  spdlog::trace("drained");
+  SPDLOG_TRACE("drained");
 }
 
 void serial_port::cancel() noexcept
 {
-  spdlog::trace("cancelling...");
+  SPDLOG_TRACE("cancelling...");
   if (!is_open())
   {
-    spdlog::warn("port not open");
+    SPDLOG_WARN("port not open");
     return;
   }
   ::tcflush(handle_.get(), TCIOFLUSH);
-  spdlog::trace("cancelled");
+  SPDLOG_TRACE("cancelled");
 }
 
 bool serial_port::apply_port_settings() noexcept
 {
-  spdlog::debug("applying port settings...");
+  SPDLOG_DEBUG("applying port settings...");
   if (!is_open())
   {
-    spdlog::warn("port not open");
+    SPDLOG_WARN("port not open");
     return false;
   }
   if (0 != ::tcsetattr(handle_.get(), TCSANOW, &newtty_))
   {
-    spdlog::error("could not apply port changes: {}", strerror(errno));
+    SPDLOG_ERROR("could not apply port changes: {}", strerror(errno));
     return false;
   }
-  spdlog::debug("port settings applied");
+  SPDLOG_DEBUG("port settings applied");
   return true;
 }
 
 bool serial_port::restore_port_settings() noexcept
 {
-  spdlog::debug("restoring port settings...");
+  SPDLOG_DEBUG("restoring port settings...");
   if (!is_open())
   {
-    spdlog::warn("port not open");
+    SPDLOG_WARN("port not open");
     return false;
   }
   if (0 != ::tcsetattr(handle_.get(), TCSANOW, &oldtty_))
   {
-    spdlog::error("could not restore port changes: {}", strerror(errno));
+    SPDLOG_ERROR("could not restore port changes: {}", strerror(errno));
     return false;
   }
-  spdlog::debug("port settings restored");
+  SPDLOG_DEBUG("port settings restored");
   return true;
 }
 

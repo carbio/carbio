@@ -15,7 +15,6 @@ Dialog {
         context: Qt.ApplicationShortcut
         onActivated: {
             debugMode = !debugMode
-            console.log("Debug mode:", debugMode ? "ENABLED" : "DISABLED")
         }
     }
 

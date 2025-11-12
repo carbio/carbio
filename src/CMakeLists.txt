@@ -1,5 +1,6 @@
 add_subdirectory(hal)
 add_subdirectory(cli)
+add_subdirectory(setup)
 option(CARBIO_BUILD_GUI "Build Qt6 GUI" OFF)
 if (CARBIO_BUILD_GUI)
 add_subdirectory(gui)

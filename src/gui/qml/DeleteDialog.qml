@@ -227,9 +227,7 @@ Dialog {
         if (deleteIdInput.text.length > 0) {
             var id = parseInt(deleteIdInput.text)
             if (id >= 1 && id <= 127) {
-                console.log("Deleting ID:", id)
                 controller.deleteFingerprint(id)
-                // Keep dialog open to show progress
             }
         }
     }

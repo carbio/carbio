@@ -224,9 +224,7 @@ Dialog {
         if (verifyIdInput.text.length > 0) {
             var id = parseInt(verifyIdInput.text)
             if (id >= 1 && id <= 127) {
-                console.log("Verifying ID:", id)
                 controller.verifyFingerprint(id)
-                // Keep dialog open to show progress
             }
         }
     }
