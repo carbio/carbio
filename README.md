@@ -11,9 +11,9 @@ Traditional vehicle key fobs are vulnerable to relay attacks and theft. This pro
 
 ## Hardware Connection
 
-![Sensor cable pinout](./docs/resources/sensor_cable.png)
+![Sensor cable pinout](docs/resources/sensor_cable.png)
 
-![Raspberry Pi connection](./docs/resources/rpi_adafruit_connection.png)
+![Raspberry Pi connection](docs/resources/rpi_adafruit_connection.png)
 
 **Sensor:** R503 capacitive fingerprint module (or compatible: Adafruit ID751, R503-RGB)
 
@@ -32,7 +32,7 @@ Traditional vehicle key fobs are vulnerable to relay attacks and theft. This pro
 
 ## System Architecture
 
-![System Architecture](./docs/resources/system_architecture.png)
+![System Architecture](docs/resources/system_architecture.png)
 
 The project consists of four main components:
 
@@ -166,7 +166,7 @@ Interactive terminal-based setup utility (`carbio_setup`) with menu-driven inter
 
 ### 4. GUI Application (`src/gui/`)
 
-![GUI Setup Wizard](./docs/resources/gui_setup_wizard3_1.png)
+![GUI Setup Wizard](docs/resources/gui_setup_wizard3_1.png)
 
 Qt6 QML graphical dashboard for vehicle biometric authentication.
 
@@ -185,7 +185,7 @@ Qt6 QML graphical dashboard for vehicle biometric authentication.
 - **`notepad_metadata.h/.cpp`** - Sensor notepad data persistence
 - **`radialbar.h/.cpp`** - Custom radial progress bar widget
 
-![GUI Dashboard](./docs/resources/gui_dashboard.png)
+![GUI Dashboard](docs/resources/gui_dashboard.png)
 
 **Role-Based Access Control (RBAC):**
 
