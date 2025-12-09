@@ -3,6 +3,9 @@
 #include "fingerprint/fingerprint_sensor.h"
 #include <fmt/core.h>
 
+#include <algorithm>
+#include <array>
+#include <cctype>
 #include <iostream>
 
 void device_config_menu(carbio::fingerprint_sensor& s) noexcept
@@ -54,251 +57,175 @@ void device_config_menu(carbio::fingerprint_sensor& s) noexcept
   }
 }
 
+namespace
+{
+constexpr auto serial_port = "/dev/ttyAMA0";
+}
+
 void baud_rate_menu(carbio::fingerprint_sensor& s) noexcept
 {
+  struct baud_option
+  {
+    char key;
+    const char* label;
+    carbio::baud_rate_setting setting;
+  };
+
+  constexpr std::array<baud_option, 12> kOptions{{
+      {'1', "9600", carbio::baud_rate_setting::_9600},
+      {'2', "19200", carbio::baud_rate_setting::_19200},
+      {'3', "28800", carbio::baud_rate_setting::_28800},
+      {'4', "38400", carbio::baud_rate_setting::_38400},
+      {'5', "48000", carbio::baud_rate_setting::_48000},
+      {'6', "57600", carbio::baud_rate_setting::_57600},
+      {'7', "67200", carbio::baud_rate_setting::_67200},
+      {'8', "76800", carbio::baud_rate_setting::_76800},
+      {'9', "86400", carbio::baud_rate_setting::_86400},
+      {'a', "96000", carbio::baud_rate_setting::_96000},
+      {'b', "105600", carbio::baud_rate_setting::_105600},
+      {'c', "115200", carbio::baud_rate_setting::_115200},
+  }};
+
+  auto reconnect_sensor = [&]() {
+    s.disconnect();
+    s.connect(serial_port);
+  };
+
   std::string input;
   for (;;)
   {
-    fmt::print("----------\n");
-    fmt::print("\nset baud rate:\n");
-    fmt::print("1) 9600\n");
-    fmt::print("2) 19200\n");
-    fmt::print("3) 28800\n");
-    fmt::print("4) 38400\n");
-    fmt::print("5) 48000\n");
-    fmt::print("6) 57600\n");
-    fmt::print("7) 67200\n");
-    fmt::print("8) 76800\n");
-    fmt::print("9) 86400\n");
-    fmt::print("a) 96000\n");
-    fmt::print("b) 105600\n");
-    fmt::print("c) 115200\n");
-    fmt::print("x) back\n");
-    fmt::print("----------\n");
-    fmt::print("> ");
-    std::getline(std::cin, input);
-    const auto cmd = input.front();
-    if (cmd == 'X' || cmd == 'x')
+    fmt::print("----------\n\nset baud rate:\n");
+    for (const auto& option : kOptions)
     {
+      fmt::print("{} ) {}\n", option.key, option.label);
+    }
+    fmt::print("x) back\n----------\n> ");
+
+    if (!std::getline(std::cin, input) || input.empty())
+      continue;
+
+    const auto raw_cmd = input.front();
+    const auto cmd = static_cast<char>(std::tolower(static_cast<unsigned char>(raw_cmd)));
+
+    if (cmd == 'x')
       return;
-    }
-    switch (cmd)
+
+    const auto selection = std::find_if(kOptions.begin(), kOptions.end(),
+                                        [cmd](const auto& option) { return option.key == cmd; });
+
+    if (selection == kOptions.end())
     {
-    case '1':
-      if (auto r = s.set_baud_rate_setting(carbio::baud_rate_setting::_9600); !r)
-      {
-        fmt::print("{}", message(r.error()));
-      }
-      s.disconnect();
-      s.connect("/dev/ttyAMA0");
-      break;
-    case '2':
-      if (auto r = s.set_baud_rate_setting(carbio::baud_rate_setting::_19200); !r)
-      {
-        fmt::print("{}", message(r.error()));
-      }
-      s.disconnect();
-      s.connect("/dev/ttyAMA0");
-      break;
-    case '3':
-      if (auto r = s.set_baud_rate_setting(carbio::baud_rate_setting::_28800); !r)
-      {
-        fmt::print("{}", message(r.error()));
-      }
-      s.disconnect();
-      s.connect("/dev/ttyAMA0");
-      break;
-    case '4':
-      if (auto r = s.set_baud_rate_setting(carbio::baud_rate_setting::_38400); !r)
-      {
-        fmt::print("{}", message(r.error()));
-      }
-      s.disconnect();
-      s.connect("/dev/ttyAMA0");
-      break;
-    case '5':
-      if (auto r = s.set_baud_rate_setting(carbio::baud_rate_setting::_48000); !r)
-      {
-        fmt::print("{}", message(r.error()));
-      }
-      s.disconnect();
-      s.connect("/dev/ttyAMA0");
-      break;
-    case '6':
-      if (auto r = s.set_baud_rate_setting(carbio::baud_rate_setting::_57600); !r)
-      {
-        fmt::print("{}", message(r.error()));
-      }
-      s.disconnect();
-      s.connect("/dev/ttyAMA0");
-      break;
-    case '7':
-      if (auto r = s.set_baud_rate_setting(carbio::baud_rate_setting::_67200); !r)
-      {
-        fmt::print("{}", message(r.error()));
-      }
-      s.disconnect();
-      s.connect("/dev/ttyAMA0");
-      break;
-    case '8':
-      if (auto r = s.set_baud_rate_setting(carbio::baud_rate_setting::_76800); !r)
-      {
-        fmt::print("{}", message(r.error()));
-      }
-      s.disconnect();
-      s.connect("/dev/ttyAMA0");
-      break;
-    case '9':
-      if (auto r = s.set_baud_rate_setting(carbio::baud_rate_setting::_86400); !r)
-      {
-        fmt::print("{}", message(r.error()));
-      }
-      s.disconnect();
-      s.connect("/dev/ttyAMA0");
-      break;
-    case 'A':
-    case 'a':
-      if (auto r = s.set_baud_rate_setting(carbio::baud_rate_setting::_96000); !r)
-      {
-        fmt::print("{}", message(r.error()));
-      }
-      s.disconnect();
-      s.connect("/dev/ttyAMA0");
-      break;
-    case 'B':
-    case 'b':
-      if (auto r = s.set_baud_rate_setting(carbio::baud_rate_setting::_105600); !r)
-      {
-        fmt::print("{}", message(r.error()));
-      }
-      s.disconnect();
-      s.connect("/dev/ttyAMA0");
-      break;
-    case 'C':
-    case 'c':
-      if (auto r = s.set_baud_rate_setting(carbio::baud_rate_setting::_115200); !r)
-      {
-        fmt::print("{}", message(r.error()));
-      }
-      s.disconnect();
-      s.connect("/dev/ttyAMA0");
-      break;
-    default:
-      fmt::print("unknown command '{}'\n", cmd);
-      break;
+      fmt::print("unknown command '{}'\n", raw_cmd);
+      continue;
     }
+
+    if (auto r = s.set_baud_rate_setting(selection->setting); !r)
+    {
+      fmt::print("{}", message(r.error()));
+      continue;
+    }
+
+    reconnect_sensor();
   }
 }
 
 void security_level_menu(carbio::fingerprint_sensor& s) noexcept
 {
+  struct option
+  {
+    char key;
+    const char* label;
+    carbio::security_level_setting value;
+  };
+
+  constexpr std::array<option, 5> kOptions{{
+      {'1', "lowest", carbio::security_level_setting::lowest},
+      {'2', "low", carbio::security_level_setting::low},
+      {'3', "balanced", carbio::security_level_setting::balanced},
+      {'4', "high", carbio::security_level_setting::high},
+      {'5', "highest", carbio::security_level_setting::highest},
+  }};
+
   std::string input;
   for (;;)
   {
-    fmt::print("----------\n");
-    fmt::print("\nset security level:\n");
-    fmt::print("1) lowest\n");
-    fmt::print("2) low\n");
-    fmt::print("3) balanced\n");
-    fmt::print("4) high\n");
-    fmt::print("5) highest\n");
-    fmt::print("x) back\n");
-    fmt::print("----------\n");
-    fmt::print("> ");
-    std::getline(std::cin, input);
-    const auto cmd = input.front();
-    if (cmd == 'X' || cmd == 'x')
+    fmt::print("----------\n\nset security level:\n");
+    for (const auto& option : kOptions)
     {
-      return;
+      fmt::print("{} ) {}\n", option.key, option.label);
     }
-    switch (cmd)
+    fmt::print("x) back\n----------\n> ");
+
+    if (!std::getline(std::cin, input) || input.empty())
+      continue;
+
+    const auto raw_cmd = input.front();
+    const auto cmd = static_cast<char>(std::tolower(static_cast<unsigned char>(raw_cmd)));
+
+    if (cmd == 'x')
+      return;
+
+    const auto selection = std::find_if(kOptions.begin(), kOptions.end(),
+                                        [cmd](const auto& option) { return option.key == cmd; });
+    if (selection == kOptions.end())
     {
-    case '1':
-      if (auto r = s.set_security_level_setting(carbio::security_level_setting::lowest); !r)
-      {
-        fmt::print("{}", message(r.error()));
-      }
-      break;
-    case '2':
-      if (auto r = s.set_security_level_setting(carbio::security_level_setting::low); !r)
-      {
-        fmt::print("{}", message(r.error()));
-      }
-      break;
-    case '3':
-      if (auto r = s.set_security_level_setting(carbio::security_level_setting::balanced); !r)
-      {
-        fmt::print("{}", message(r.error()));
-      }
-      break;
-    case '4':
-      if (auto r = s.set_security_level_setting(carbio::security_level_setting::high); !r)
-      {
-        fmt::print("{}", message(r.error()));
-      }
-      break;
-    case '5':
-      if (auto r = s.set_security_level_setting(carbio::security_level_setting::highest); !r)
-      {
-        fmt::print("{}", message(r.error()));
-      }
-      break;
-    default:
-      fmt::print("unknown command '{}'\n", cmd);
-      break;
+      fmt::print("unknown command '{}'\n", raw_cmd);
+      continue;
+    }
+
+    if (auto r = s.set_security_level_setting(selection->value); !r)
+    {
+      fmt::print("{}", message(r.error()));
     }
   }
 }
 
 void packet_length_menu(carbio::fingerprint_sensor& s) noexcept
 {
+  struct option
+  {
+    char key;
+    const char* label;
+    carbio::packet_length_setting value;
+  };
+
+  constexpr std::array<option, 4> kOptions{{
+      {'1', "32", carbio::packet_length_setting::_32},
+      {'2', "64", carbio::packet_length_setting::_64},
+      {'3', "128", carbio::packet_length_setting::_128},
+      {'4', "256", carbio::packet_length_setting::_256},
+  }};
+
   std::string input;
   for (;;)
   {
-    fmt::print("----------\n");
-    fmt::print("\nset packet length:\n");
-    fmt::print("1) 32\n");
-    fmt::print("2) 64\n");
-    fmt::print("3) 128\n");
-    fmt::print("4) 256\n");
-    fmt::print("x) back\n");
-    fmt::print("----------\n");
-    fmt::print("> ");
-    std::getline(std::cin, input);
-    const auto cmd = input.front();
-    if (cmd == 'X' || cmd == 'x')
+    fmt::print("----------\n\nset packet length:\n");
+    for (const auto& option : kOptions)
     {
-      return;
+      fmt::print("{} ) {}\n", option.key, option.label);
     }
-    switch (cmd)
+    fmt::print("x) back\n----------\n> ");
+
+    if (!std::getline(std::cin, input) || input.empty())
+      continue;
+
+    const auto raw_cmd = input.front();
+    const auto cmd = static_cast<char>(std::tolower(static_cast<unsigned char>(raw_cmd)));
+
+    if (cmd == 'x')
+      return;
+
+    const auto selection = std::find_if(kOptions.begin(), kOptions.end(),
+                                        [cmd](const auto& option) { return option.key == cmd; });
+    if (selection == kOptions.end())
     {
-    case '1':
-      if (auto r = s.set_packet_length_setting(carbio::packet_length_setting::_32); !r)
-      {
-        fmt::print("{}", message(r.error()));
-      }
-      break;
-    case '2':
-      if (auto r = s.set_packet_length_setting(carbio::packet_length_setting::_64); !r)
-      {
-        fmt::print("{}", message(r.error()));
-      }
-      break;
-    case '3':
-      if (auto r = s.set_packet_length_setting(carbio::packet_length_setting::_128); !r)
-      {
-        fmt::print("{}", message(r.error()));
-      }
-      break;
-    case '4':
-      if (auto r = s.set_packet_length_setting(carbio::packet_length_setting::_256); !r)
-      {
-        fmt::print("{}", message(r.error()));
-      }
-      break;
-    default:
-      fmt::print("unknown command '{}'\n", cmd);
-      break;
+      fmt::print("unknown command '{}'\n", raw_cmd);
+      continue;
+    }
+
+    if (auto r = s.set_packet_length_setting(selection->value); !r)
+    {
+      fmt::print("{}", message(r.error()));
     }
   }
 }
@@ -345,7 +272,7 @@ void soft_reset_menu(carbio::fingerprint_sensor& s) noexcept
         return;
       }
       s.disconnect();
-      s.connect("/dev/ttyAMA0");
+      s.connect(serial_port);
       fmt::print("{}\n", to_json(s.get_device_settings()));
       fmt::print("device has been soft reset\n");
       return;

@@ -33,12 +33,10 @@ FILES
   io/handle.h
   io/handle_traits.h
   io/serial_port.h
-  utility/blocking_queue.h
   utility/conversion.h
   utility/endian.h
   utility/floating_point.h
   utility/locked_buffer.h
-  utility/lockfree_triple_buffer.h
   utility/scoped_zero.h
   utility/spinlock.h
 
