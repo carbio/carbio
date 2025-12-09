@@ -280,49 +280,21 @@ sudo dnf install qt6-qtbase-devel qt6-qtdeclarative-devel
 
 ---
 
-## CMake Directory Structure
+## Toolchains (Optional)
+
+The main build now configures itself entirely from the root `CMakeLists.txt`.
+If you need cross-compilation or tuned Raspberry Pi builds, the optional
+toolchain files remain available under `cmake/Toolchains/`:
 
 ```
-cmake/
-├── Init.cmake                    # Main initialization (includes all modules)
-├── Modules/
-│   ├── CCache.cmake              # ccache detection and setup
-│   ├── CPack.cmake               # Packaging configuration (TGZ/ZIP)
-│   └── Paths.cmake               # Search paths and output directories
-└── Toolchains/
-    ├── toolchain-gcc.cmake       # GCC toolchain configuration
-    └── overrides-gcc.cmake       # GCC compiler flags and build types
+cmake/Toolchains/
+├── toolchain-gcc.cmake       # Generic GCC cross-build settings
+└── overrides-gcc.cmake       # Shared compiler/linker flag tweaks
 ```
 
-### Toolchain Features
-
-The GCC toolchain (`cmake/Toolchains/toolchain-gcc.cmake`) provides:
-
-- **Automatic CPU detection** for parallel builds
-- **Raspberry Pi optimization** (reduced parallelism for older models)
-- **Unity builds** for faster compilation
-- **Ninja job pools** (parallel compile, sequential link)
-
-### Build Types
-
-| Build Type | Description |
-|------------|-------------|
-| `Debug` | Debug symbols, no optimization (`-O0 -g`) |
-| `Release` | Full optimization, stripped (`-O3 -s`) |
-| `Profile` | Optimization with frame pointers (`-O2 -fno-omit-frame-pointer`) |
-| `ASan` | AddressSanitizer (memory errors, leaks) |
-| `TSan` | ThreadSanitizer (data races) |
-| `UBSan` | UndefinedBehaviorSanitizer |
-
-### Security Hardening
-
-All builds include security flags:
-- `-D_FORTIFY_SOURCE=3` - Buffer overflow detection
-- `-fstack-protector -fstack-clash-protection` - Stack protection
-- `-fsanitize=bounds -fsanitize-undefined-trap-on-error` - Runtime bounds checking (traps on violation)
-
-Release/Profile builds include linker hardening:
-- `-z separate-code,-z nodlopen,-z noexecstack,-z now,-z relro`
+Pass `-DCMAKE_TOOLCHAIN_FILE=../cmake/Toolchains/toolchain-gcc.cmake` when you
+need those presets; otherwise CMake uses your host compiler with no extra
+indirection.
 
 ---
 
@@ -523,7 +495,8 @@ ctest -R integration --output-on-failure
 ### Running Benchmarks
 
 ```bash
-./tests/benchmarks/run_all_benchmarks.sh
+cmake --build --preset gcc-release-perf --target fingerprint_benchmarks
+ctest --preset gcc-release-perf -R fingerprint_benchmarks --output-on-failure
 ```
 
 ---
@@ -552,12 +525,8 @@ cpack
 | `CMakeLists.txt` | Root CMake configuration |
 | `CMakePresets.json` | CMake presets (configure, build, test, package, workflow) |
 | `conanfile.py` | Conan dependency specification |
-| `cmake/Init.cmake` | CMake initialization (includes all modules) |
-| `cmake/Modules/CCache.cmake` | ccache detection for faster rebuilds |
-| `cmake/Modules/CPack.cmake` | Packaging configuration |
-| `cmake/Modules/Paths.cmake` | Search paths and output directories |
-| `cmake/Toolchains/toolchain-gcc.cmake` | GCC toolchain with parallel build config |
-| `cmake/Toolchains/overrides-gcc.cmake` | GCC compiler flags and build types |
+| `cmake/Toolchains/toolchain-gcc.cmake` | Optional GCC toolchain preset |
+| `cmake/Toolchains/overrides-gcc.cmake` | Shared compiler/linker overrides |
 | `src/CMakeLists.txt` | Source directory configuration |
 
 ---

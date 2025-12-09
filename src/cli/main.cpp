@@ -14,6 +14,8 @@
 
 #include <gflags/gflags.h>
 
+#include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <fstream>
@@ -547,6 +549,82 @@ int cmd_import(fingerprint_sensor& sensor)
   return EXIT_SUCCESS;
 }
 
+struct command_entry
+{
+  const char* name;
+  bool (*is_requested)();
+  int (*execute)(fingerprint_sensor&);
+};
+
+static const std::array<command_entry, 19>& command_table()
+{
+  static const std::array<command_entry, 19> commands{{
+      {"capture", [] { return FLAGS_capture; }, cmd_capture},
+      {"extract", [] { return FLAGS_extract; }, cmd_extract},
+      {"merge", [] { return FLAGS_merge; }, cmd_merge},
+      {"store", [] { return FLAGS_store; }, cmd_store},
+      {"load", [] { return FLAGS_load; }, cmd_load},
+      {"down", [] { return FLAGS_down; }, cmd_download},
+      {"up", [] { return FLAGS_up; }, cmd_upload},
+      {"erase", [] { return FLAGS_erase; }, cmd_erase},
+      {"erase_all", [] { return FLAGS_erase_all; }, cmd_erase_all},
+      {"match", [] { return FLAGS_match; }, cmd_match},
+      {"search", [] { return FLAGS_search; }, cmd_search},
+      {"fast_search", [] { return FLAGS_fast_search; }, cmd_fast_search},
+      {"get_count", [] { return FLAGS_get_count; }, cmd_count},
+      {"export", [] { return FLAGS_export; }, cmd_export},
+      {"import", [] { return FLAGS_import; }, cmd_import},
+      {"led", [] { return FLAGS_led >= 0; }, cmd_led},
+      {"enroll", [] { return FLAGS_enroll; }, cmd_enroll},
+      {"verify", [] { return FLAGS_verify; }, cmd_verify},
+      {"identify", [] { return FLAGS_identify; }, cmd_identify},
+  }};
+
+  return commands;
+}
+
+static const command_entry* select_command(const char* program_name)
+{
+  const auto& commands = command_table();
+  const command_entry* selected = nullptr;
+  std::vector<const char*> requested;
+  requested.reserve(commands.size());
+
+  for (const auto& entry : commands)
+  {
+    if (!entry.is_requested())
+      continue;
+
+    requested.emplace_back(entry.name);
+    if (!selected)
+      selected = &entry;
+  }
+
+  if (requested.empty())
+  {
+    std::cerr << "Error: No command specified" << std::endl;
+    gflags::ShowUsageWithFlags(program_name);
+    return nullptr;
+  }
+
+  if (requested.size() > 1)
+  {
+    std::cerr << "Error: Multiple commands specified (";
+    for (std::size_t i = 0; i < requested.size(); ++i)
+    {
+      std::cerr << requested[i];
+      if (i + 1 != requested.size())
+      {
+        std::cerr << ", ";
+      }
+    }
+    std::cerr << "); only one allowed" << std::endl;
+    return nullptr;
+  }
+
+  return selected;
+}
+
 // ============================================================================
 // Main Entry Point
 // ============================================================================
@@ -620,38 +698,9 @@ EXAMPLES:
 
   gflags::ParseCommandLineFlags(&argc, &argv, true);
 
-  // Count number of commands
-  int command_count = 0;
-  command_count += FLAGS_capture ? 1 : 0;
-  command_count += FLAGS_extract ? 1 : 0;
-  command_count += FLAGS_merge ? 1 : 0;
-  command_count += FLAGS_store ? 1 : 0;
-  command_count += FLAGS_load ? 1 : 0;
-  command_count += FLAGS_down ? 1 : 0;
-  command_count += FLAGS_up ? 1 : 0;
-  command_count += FLAGS_erase ? 1 : 0;
-  command_count += FLAGS_erase_all ? 1 : 0;
-  command_count += FLAGS_match ? 1 : 0;
-  command_count += FLAGS_search ? 1 : 0;
-  command_count += FLAGS_fast_search ? 1 : 0;
-  command_count += FLAGS_get_count ? 1 : 0;
-  command_count += FLAGS_export ? 1 : 0;
-  command_count += FLAGS_import ? 1 : 0;
-  command_count += (FLAGS_led >= 0) ? 1 : 0;
-  command_count += FLAGS_enroll ? 1 : 0;
-  command_count += FLAGS_verify ? 1 : 0;
-  command_count += FLAGS_identify ? 1 : 0;
-
-  if (command_count == 0)
+  const auto* command = select_command(argv[0]);
+  if (!command)
   {
-    std::cerr << "Error: No command specified" << std::endl;
-    gflags::ShowUsageWithFlags(argv[0]);
-    return EXIT_FAILURE;
-  }
-
-  if (command_count > 1)
-  {
-    std::cerr << "Error: Multiple commands specified, only one allowed" << std::endl;
     return EXIT_FAILURE;
   }
 
@@ -669,46 +718,7 @@ EXAMPLES:
   std::cout << std::endl;
 
   // Execute command
-  int result = EXIT_FAILURE;
-
-  if (FLAGS_capture)
-    result = cmd_capture(sensor);
-  else if (FLAGS_extract)
-    result = cmd_extract(sensor);
-  else if (FLAGS_merge)
-    result = cmd_merge(sensor);
-  else if (FLAGS_store)
-    result = cmd_store(sensor);
-  else if (FLAGS_load)
-    result = cmd_load(sensor);
-  else if (FLAGS_down)
-    result = cmd_download(sensor);
-  else if (FLAGS_up)
-    result = cmd_upload(sensor);
-  else if (FLAGS_erase)
-    result = cmd_erase(sensor);
-  else if (FLAGS_erase_all)
-    result = cmd_erase_all(sensor);
-  else if (FLAGS_match)
-    result = cmd_match(sensor);
-  else if (FLAGS_search)
-    result = cmd_search(sensor);
-  else if (FLAGS_fast_search)
-    result = cmd_fast_search(sensor);
-  else if (FLAGS_get_count)
-    result = cmd_count(sensor);
-  else if (FLAGS_export)
-    result = cmd_export(sensor);
-  else if (FLAGS_import)
-    result = cmd_import(sensor);
-  else if (FLAGS_led >= 0)
-    result = cmd_led(sensor);
-  else if (FLAGS_enroll)
-    result = cmd_enroll(sensor);
-  else if (FLAGS_verify)
-    result = cmd_verify(sensor);
-  else if (FLAGS_identify)
-    result = cmd_identify(sensor);
+  const int result = command->execute(sensor);
 
   // Disconnect
   sensor.disconnect();
