@@ -33,7 +33,7 @@
 
 #pragma once
 
-#include "fingerprint/status_flag.h"
+#include "fingerprint/sensor_types.h"
 
 #include <expected>
 

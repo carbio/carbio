@@ -3,7 +3,7 @@
 
 #include "fingerprint/command_code.h"
 #include "fingerprint/fingerprint_sensor.h"
-#include "fingerprint/status_code.h"
+#include "fingerprint/sensor_types.h"
 
 namespace carbio::unit_tests
 {

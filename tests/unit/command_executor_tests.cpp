@@ -4,7 +4,7 @@
 #include "fingerprint/command_code.h"
 #include "fingerprint/command_executor.h"
 #include "fingerprint/packet.h"
-#include "fingerprint/status_code.h"
+#include "fingerprint/sensor_types.h"
 #include "protocol_handler_mock.h"
 #include "serial_port_mock.h"
 #include "utility/endian.h"

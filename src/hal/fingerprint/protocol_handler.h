@@ -33,8 +33,8 @@
 #pragma once
 
 #include "fingerprint/command_code.h"
-#include "fingerprint/packet_id.h"
 #include "fingerprint/result.h"
+#include "fingerprint/sensor_types.h"
 #include "utility/locked_buffer.h"
 
 #include <cstdint>

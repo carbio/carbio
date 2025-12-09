@@ -34,7 +34,7 @@
 #include "sensor_worker.h"
 
 #include "fingerprint/fingerprint_sensor.h"
-#include "fingerprint/status_flag.h"
+#include "fingerprint/sensor_types.h"
 #include <QTimer>
 
 #ifndef SPDLOG_ACTIVE_LEVEL

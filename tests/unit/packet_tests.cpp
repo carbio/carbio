@@ -2,8 +2,7 @@
 #include <gtest/gtest.h>
 
 #include "fingerprint/packet.h"
-#include "fingerprint/packet_id.h"
-#include "fingerprint/status_code.h"
+#include "fingerprint/sensor_types.h"
 #include "utility/endian.h"
 
 #include <array>

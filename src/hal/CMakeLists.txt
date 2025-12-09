@@ -7,28 +7,20 @@ FILE_SET HEADERS
 BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}
 FILES
   core/assert.h
-  fingerprint/baud_rate_setting.h
   fingerprint/command_code.h
   fingerprint/command_deserializer.h
   fingerprint/command_executor.h
   fingerprint/command_serializer.h
   fingerprint/command_traits.h
   fingerprint/device_info.h
-  fingerprint/device_setting_index.h
   fingerprint/device_settings.h
   fingerprint/fingerprint_sensor.h
-  fingerprint/led_color_setting.h
-  fingerprint/led_mode_setting.h
   fingerprint/match_query_info.h
-  fingerprint/packet_length_setting.h
-  fingerprint/packet_id.h
   fingerprint/packet.h
   fingerprint/protocol_handler.h
   fingerprint/result.h
   fingerprint/search_query_info.h
-  fingerprint/security_level_setting.h
-  fingerprint/status_code.h
-  fingerprint/status_flag.h
+  fingerprint/sensor_types.h
   fingerprint/user_data.h
   io/handle.h
   io/handle_traits.h

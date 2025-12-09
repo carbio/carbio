@@ -17,7 +17,7 @@
 #include "fingerprint/match_query_info.h"
 #include "fingerprint/result.h"
 #include "fingerprint/search_query_info.h"
-#include "fingerprint/status_code.h"
+#include "fingerprint/sensor_types.h"
 
 #include <chrono>
 #include <memory>

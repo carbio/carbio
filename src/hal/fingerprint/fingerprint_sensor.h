@@ -33,20 +33,15 @@
 
 #pragma once
 
-#include "fingerprint/baud_rate_setting.h"
 #include "fingerprint/command_code.h"
 #include "fingerprint/command_executor.h"
 #include "fingerprint/device_info.h"
-#include "fingerprint/device_setting_index.h"
 #include "fingerprint/device_settings.h"
-#include "fingerprint/led_color_setting.h"
-#include "fingerprint/led_mode_setting.h"
 #include "fingerprint/match_query_info.h"
-#include "fingerprint/packet_length_setting.h"
 #include "fingerprint/protocol_handler.h"
 #include "fingerprint/result.h"
 #include "fingerprint/search_query_info.h"
-#include "fingerprint/security_level_setting.h"
+#include "fingerprint/sensor_types.h"
 #include "io/serial_port.h"
 
 #include <array>
