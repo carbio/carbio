@@ -290,55 +290,56 @@ void SensorWorker::enrollFingerprint(int id)
 {
   SPDLOG_INFO("enrollFingerprint called for BASE ID: {}", id);
 
+  const auto fail = [this](const QString& reason)
+  {
+    emit enrollmentFailed(reason);
+    emit scanProgressUpdate(0);
+  };
+
   if (!m_sensor)
   {
     SPDLOG_WARN("Sensor not available");
-    emit enrollmentFailed("Sensor not available");
+    fail("Sensor not available");
     return;
   }
 
-  static constexpr int TEMPLATE_PER_USER = 3;
-  static constexpr int SAMPLES_PER_TEMPLATE = 3;
+  constexpr int kMinId = 0;
+  constexpr int kMaxId = 127; // R503 flash slots
 
-  // Validate ID range (0-127 for R307 sensor)
-  if (id < 0 || id > 127)
+  if (id < kMinId || id > kMaxId)
   {
     SPDLOG_WARN("Invalid ID: {}", id);
-    emit enrollmentFailed("Invalid ID. Must be between 0 and 127.");
+    fail("Invalid ID. Must be between 0 and 127.");
     return;
   }
 
-  SPDLOG_INFO("Starting enrollment for ID: {} using HAL's enroll_with_progress() with default 12 samples", id);
+  SPDLOG_INFO("Starting enrollment for ID: {} using HAL's enroll_with_progress()", id);
 
-  // Turn on LED
   m_sensor->turn_led_on();
-
   emit scanProgressUpdate(0);
   emit enrollmentProgress("Place finger on sensor...");
 
-  // Use HAL's enroll_with_progress() with callback for real-time updates
-  auto result = m_sensor->enroll_with_progress(static_cast<uint16_t>(id),
-                                               [this](int current_sample, int total_samples, const char* message)
-                                               {
-                                                 int percentage = (current_sample * 100) / total_samples;
-                                                 emit scanProgressUpdate(percentage);
-                                                 emit enrollmentProgress(QString::fromUtf8(message) + QString(" (%1/%2)").arg(current_sample).arg(total_samples));
-                                               });
+  const auto progress_callback = [this](int current, int total, const char* message)
+  {
+    const int percentage = (total == 0) ? 0 : (current * 100) / total;
+    emit scanProgressUpdate(percentage);
+    emit enrollmentProgress(QString::fromUtf8(message)
+                            + QString(" (%1/%2)").arg(current).arg(total));
+  };
 
-  if (result)
+  const auto result = m_sensor->enroll_with_progress(static_cast<uint16_t>(id), progress_callback);
+  if (!result)
   {
-    emit scanProgressUpdate(100);
-    emit enrollmentComplete("Fingerprint enrolled successfully as ID #" + QString::number(id));
-    SPDLOG_INFO("Enrollment successful for ID: {}", id);
-  }
-  else
-  {
-    emit scanProgressUpdate(0);
-    QString errorMsg = QString::fromStdString(carbio::message(result.error()));
-    emit enrollmentFailed("Enrollment failed: " + errorMsg);
-    SPDLOG_WARN("Enrollment failed for ID: {} - {}", id, errorMsg.toStdString());
+    const QString error = QString::fromStdString(carbio::message(result.error()));
+    SPDLOG_WARN("Enrollment failed for ID {} - {}", id, error.toStdString());
+    fail("Enrollment failed: " + error);
     m_sensor->turn_led_off();
+    return;
   }
+
+  emit scanProgressUpdate(100);
+  emit enrollmentComplete(QStringLiteral("Fingerprint enrolled successfully as ID #%1").arg(id));
+  SPDLOG_INFO("Enrollment successful for ID: {}", id);
 }
 
 void SensorWorker::identifyFingerprint()
